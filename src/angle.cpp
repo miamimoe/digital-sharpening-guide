@@ -1,6 +1,10 @@
 #include "angle.h"
 #include <cmath>
 
+// Axis pointing out the back of the device (into the blade). MPU6886 body frame on M5StickC Plus PCB.
+// Sign validated by hardware bring-up step 3; flip to {0,0,1} if gravity Z reads +1g when screen-up.
+static constexpr Vec3 N_BACK = {0.0f, 0.0f, -1.0f};
+
 static inline float dot(Vec3 a, Vec3 b) {
     return a.x*b.x + a.y*b.y + a.z*b.z;
 }
