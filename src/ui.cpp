@@ -77,7 +77,7 @@ void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection 
             M5.Display.print("CANCEL");
         } else {
             M5.Display.printf("%02d", (int)preset_degrees(preset));
-            M5.Display.print((char)247); // degree symbol
+            M5.Display.print((char)176); // degree symbol (Latin-1 0xB0)
         }
     } else {
         M5.Display.printf("%4.1f", live_angle_deg);

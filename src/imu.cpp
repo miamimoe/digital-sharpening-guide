@@ -41,21 +41,26 @@ bool read(Vec3& accel_g, Vec3& gyro_dps) {
 }
 
 bool capture_gyro_bias(Vec3& bias_out_dps) {
-    constexpr int   SAMPLES     = 1000;       // 10 s @ 100 Hz
-    constexpr float STILLNESS_G = 0.15f;      // |accel mag - 1| must stay under this
-    constexpr uint32_t TICK_MS  = 10;
+    constexpr int      SAMPLES          = 1000;    // 10 s @ 100 Hz
+    constexpr float    STILLNESS_G      = 0.15f;   // |accel mag - 1| must stay under this
+    constexpr uint32_t TICK_MS          = 10;
+    constexpr uint32_t MAX_DURATION_MS  = 60000;   // give up after 60s of continuous motion
     double sx = 0, sy = 0, sz = 0;
-    uint32_t last = millis();
+    uint32_t start = millis();
+    uint32_t last  = start;
     int n = 0;
     while (n < SAMPLES) {
         uint32_t now = millis();
+        if (now - start > MAX_DURATION_MS) {
+            // Device never settled; return failure so BIAS_CAL UX can retry or fall back.
+            return false;
+        }
         if (now - last < TICK_MS) { delay(1); continue; }
         last = now;
         Vec3 a, g;
         if (!read(a, g)) return false;
         float mag = sqrtf(a.x*a.x + a.y*a.y + a.z*a.z);
         if (fabsf(mag - 1.0f) > STILLNESS_G) {
-            // Motion detected — restart capture.
             sx = sy = sz = 0;
             n  = 0;
             continue;
