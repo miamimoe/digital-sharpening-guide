@@ -64,6 +64,19 @@ void test_classify_above_tolerance_with_negative_sign_is_blue(void) {
     TEST_ASSERT_EQUAL_INT((int)ColorState::BLUE, (int)classify(r, 2.0f));
 }
 
+void test_zero_vector_input_returns_safe_fallback(void) {
+    Vec3 g_ref = {0.0f, 0.0f, 0.0f};
+    Vec3 g_now = {0.0f, 0.0f, -1.0f};
+    AngleResult r = compute_angle(g_ref, g_now);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, r.degrees);
+    TEST_ASSERT_EQUAL_INT(0, r.direction_sign);
+}
+
+void test_classify_out_of_tolerance_ambiguous_sign_is_green(void) {
+    AngleResult r = {3.0f, 0};
+    TEST_ASSERT_EQUAL_INT((int)ColorState::GREEN, (int)classify(r, 2.0f));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_zero_deviation_is_zero_degrees);
@@ -73,5 +86,7 @@ int main(int, char**) {
     RUN_TEST(test_classify_within_tolerance_is_green);
     RUN_TEST(test_classify_above_tolerance_with_positive_sign_is_red);
     RUN_TEST(test_classify_above_tolerance_with_negative_sign_is_blue);
+    RUN_TEST(test_zero_vector_input_returns_safe_fallback);
+    RUN_TEST(test_classify_out_of_tolerance_ambiguous_sign_is_green);
     return UNITY_END();
 }
