@@ -16,7 +16,7 @@ static App       g_app;
 static InputFSM  g_input;
 
 static uint32_t  g_next_tick_ms       = 0;
-static constexpr uint32_t TICK_PERIOD_MS = 10; // 100 Hz
+static constexpr uint32_t TICK_PERIOD_MS = 20; // 50 Hz — ample for human motion (1-5 Hz)
 
 void setup() {
     auto cfg = M5.config();
