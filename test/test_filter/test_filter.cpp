@@ -22,7 +22,7 @@ void test_tilts_toward_new_gravity_direction(void) {
     f.begin(100.0f);
     const float g30y = -0.5f;
     const float g30z = -std::sqrt(3.0f)/2.0f;
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 2000; i++) {
         f.update({0,0,0}, {0.0f, g30y, g30z});
     }
     Vec3 g = f.gravity();

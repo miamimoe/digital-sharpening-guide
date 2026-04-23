@@ -8,7 +8,7 @@ static inline float inv_sqrt(float x) {
 void MahonyFilter::begin(float sample_hz, float kp, float ki) {
     q0_ = 1.0f; q1_ = q2_ = q3_ = 0.0f;
     ix_ = iy_ = iz_ = 0.0f;
-    kp_ = (kp > 0.0f) ? kp : 2.0f;
+    kp_ = (kp > 0.0f) ? kp : 0.5f;
     ki_ = ki;
     dt_ = 1.0f / sample_hz;
 }
@@ -34,9 +34,6 @@ void MahonyFilter::update(Vec3 gyro_dps, Vec3 accel_g) {
         float vy = 2.0f * (q0_*q1_ + q2_*q3_);
         float vz = q0_*q0_ - q1_*q1_ - q2_*q2_ + q3_*q3_;
 
-        // Negate error: our accel convention has gravity at -z (not +z),
-        // so the reference body-frame gravity vector is negated relative to
-        // the canonical Mahony formulation.
         float ex = -(ay*vz - az*vy);
         float ey = -(az*vx - ax*vz);
         float ez = -(ax*vy - ay*vx);
