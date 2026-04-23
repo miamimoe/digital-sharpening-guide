@@ -16,6 +16,10 @@ public:
     Side  current_side() const { return side_; }
     void  reset();
 
+    // For session-restore only. Bypasses any FSM state; caller is responsible
+    // for ensuring this is only called during wake-from-sleep.
+    void restore_side(Side s) { side_ = s; }
+
 private:
     enum Phase : uint8_t { STABLE, WAITING_SETTLE };
 

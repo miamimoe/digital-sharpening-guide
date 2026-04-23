@@ -43,6 +43,7 @@ void App::begin(bool had_session_in_rtc_ram) {
         strokes_a_          = s.strokes_A;
         strokes_b_          = s.strokes_B;
         session_started_ms_ = s.session_started_ms;
+        side_fsm_.restore_side(s.current_side);
     }
     transition(State::BOOT, 0);
 }
