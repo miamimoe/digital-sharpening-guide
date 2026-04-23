@@ -40,10 +40,13 @@ void update_backlight(uint32_t now_ms, State current,
                       uint32_t last_activity_ms, uint32_t last_stroke_ms)
 {
     auto cfg = config_for(current);
-    // ACTIVE uses 50% baseline — color is the primary signal and is easily
-    // read peripherally at half-brightness. Other states use 100% for
-    // readable text/numbers.
-    uint8_t baseline_pct = (current == State::ACTIVE) ? 50 : 100;
+    // ACTIVE baseline is a mild discount from full — bright enough to read the
+    // color cue clearly under typical indoor light, while saving some battery.
+    // Other states stay at 100% for readable text/numbers.
+    uint8_t baseline_pct = (current == State::ACTIVE) ? 80 : 100;
+    // Dim level for idle — lower than baseline but still faintly visible so
+    // the user sees the device hasn't slept yet.
+    uint8_t dim_pct = (current == State::ACTIVE) ? 30 : 15;
 
     if (cfg.dim_ms == 0) {
         ui::set_backlight(baseline_pct);
@@ -51,7 +54,7 @@ void update_backlight(uint32_t now_ms, State current,
     }
     uint32_t reference = (current == State::ACTIVE) ? last_stroke_ms : last_activity_ms;
     uint32_t idle = now_ms - reference;
-    uint8_t pct = (idle >= cfg.dim_ms) ? 10 : baseline_pct;
+    uint8_t pct = (idle >= cfg.dim_ms) ? dim_pct : baseline_pct;
     ui::set_backlight(pct);
 }
 
