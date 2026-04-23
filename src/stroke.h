@@ -12,8 +12,9 @@ public:
     void      reset();
 
 private:
-    bool     sustained_            = false;
-    bool     contrary_current_     = false;
-    uint32_t contrary_started_ms_  = 0;
-    uint32_t count_                = 0;
+    bool     sustained_             = false;
+    bool     contrary_pending_      = false;  // explicit flag replacing "== 0" sentinel
+    bool     contrary_current_      = false;
+    uint32_t contrary_started_ms_   = 0;
+    uint32_t count_                 = 0;
 };
