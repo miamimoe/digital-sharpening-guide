@@ -23,6 +23,7 @@ void setup() {
     cfg.internal_imu = true;
     cfg.internal_spk = true;
     M5.begin(cfg);
+    setCpuFrequencyMhz(80);  // 80 MHz is ample for 50 Hz loop; saves ~25 mA
 
     ui::begin();
     feedback::begin();
