@@ -1,0 +1,71 @@
+#pragma once
+#include <cstdint>
+
+struct Vec3 {
+    float x;
+    float y;
+    float z;
+};
+
+enum class State : uint8_t {
+    BOOT,
+    BIAS_CAL,
+    SET_TARGET,
+    SET_TOLERANCE,
+    ACTIVE,
+    SUMMARY,
+    FAULT,
+    RESUME_PROMPT,
+    SLEEP
+};
+
+enum class Side : uint8_t { A, B };
+
+enum class Tolerance : uint8_t { TIGHT, NORMAL, EASY };
+
+enum class ColorState : uint8_t { GREEN, BLUE, RED };
+
+enum class InputEvent : uint8_t {
+    NONE,
+    A_SHORT,
+    A_LONG,
+    B_SHORT,
+    B_LONG
+};
+
+enum class PresetSelection : uint8_t {
+    P12,
+    P15,
+    P17,
+    P20,
+    P22,
+    CANCEL
+};
+
+enum class FaultCode : uint8_t {
+    NONE = 0,
+    E01_BEGIN_FAILED = 1,
+    E02_SELF_TEST_FAILED = 2,
+    E03_WHO_AM_I_MISMATCH = 3
+};
+
+inline float tolerance_degrees(Tolerance t) {
+    switch (t) {
+        case Tolerance::TIGHT:  return 1.0f;
+        case Tolerance::NORMAL: return 2.0f;
+        case Tolerance::EASY:   return 3.0f;
+    }
+    return 2.0f;
+}
+
+inline float preset_degrees(PresetSelection p) {
+    switch (p) {
+        case PresetSelection::P12:    return 12.0f;
+        case PresetSelection::P15:    return 15.0f;
+        case PresetSelection::P17:    return 17.0f;
+        case PresetSelection::P20:    return 20.0f;
+        case PresetSelection::P22:    return 22.0f;
+        case PresetSelection::CANCEL: return 0.0f;
+    }
+    return 17.0f;
+}
