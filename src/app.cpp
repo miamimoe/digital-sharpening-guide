@@ -171,6 +171,9 @@ void App::handle_active(const Tick& t) {
     side_fsm_.update(t.now_ms, accel_mag, grav_dot_ref);
     if (side_fsm_.consume_switch()) {
         stroke_fsm_.reset();
+        // Peeling and reattaching the device is unambiguous activity —
+        // reset the idle timer so we don't sleep right after a side switch.
+        last_activity_ms_ = t.now_ms;
     }
 
     if (t.input == InputEvent::A_LONG) {
@@ -194,9 +197,11 @@ void App::handle_active(const Tick& t) {
     }
 
     feedback::set_color(col);
-    if (buzzer_on_ && col != ColorState::GREEN) {
+    // Beep only on the edge GREEN -> non-GREEN, not every tick.
+    if (buzzer_on_ && col != ColorState::GREEN && prev_color_ == ColorState::GREEN) {
         feedback::beep_out_of_tolerance();
     }
+    prev_color_ = col;
 
     ui::ActiveView v{ col,
                       side_fsm_.current_side(),

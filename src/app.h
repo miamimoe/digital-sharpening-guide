@@ -57,6 +57,10 @@ private:
     uint32_t         buzzer_flash_until_   = 0;
     bool             buzzer_flash_showing_ = false;
 
+    // Track prior color so the buzzer beeps on the edge GREEN -> non-GREEN,
+    // not every tick while out of tolerance.
+    ColorState       prev_color_           = ColorState::GREEN;
+
     MahonyFilter filter_;
     StrokeFSM    stroke_fsm_;
     SideFSM      side_fsm_;

@@ -46,10 +46,11 @@ void setup() {
         Vec3 bias;
         if (imu::capture_gyro_bias(bias)) {
             settings::save_gyro_bias(bias);
+            settings::clear_first_boot();
+            // App::begin below will skip BIAS_CAL since first_boot is cleared.
         }
-        // If capture fails (device never stilled for 60s), we just proceed
-        // with zero bias; the state machine's BIAS_CAL screen will then
-        // complete its own 10s countdown and move on.
+        // If capture fails (device never stilled for 60s), leave first_boot
+        // set so the state machine's BIAS_CAL screen retries on this run.
     }
 
     g_app.begin(had_session_in_rtc);

@@ -30,7 +30,7 @@ Run once, in order, when the M5StickC Plus Watch Kit arrives. Each step has an e
 ## 3. Orientation convention (spec §4.3 — `n_back` sign validation)
 
 - [ ] Lay device screen-up on a level surface. Enter SET_TARGET. Add a one-off serial log dump of `filter_.gravity()` — look for z ≈ −1.0 g.
-- [ ] If z ≈ +1.0 g: flip the sign of `N_BACK` in `src/angle.h` from `{0,0,-1}` to `{0,0,1}`, rebuild, re-verify.
+- [ ] If z ≈ +1.0 g: flip the sign of `N_BACK` in `src/angle.cpp` from `{0,0,-1}` to `{0,0,1}`, rebuild, re-verify.
 - [ ] Tilt device 45° nose-up: X goes to ≈ −0.7 g, Z goes to ≈ −0.7 g.
 
 ## 4. Angle display smoke test
@@ -109,7 +109,7 @@ Run once, in order, when the M5StickC Plus Watch Kit arrives. Each step has an e
 
 - [ ] Full charge to ~4.2 V
 - [ ] Run in ACTIVE continuously with full backlight — measure time until auto-sleep or voltage < 3.3 V
-- [ ] Expected: 45–90 min (120 mAh cell, full-screen color fill + 100 Hz IMU is energy-hungry)
+- [ ] Expected: 60–120 min (120 mAh cell; 80 MHz CPU + 50 Hz IMU + 80% backlight baseline per the efficiency pass)
 - [ ] If < 45 min: check the efficiency audit doc for unchecked wins (lower sample rate, deeper dim, etc.)
 
 ## Sign-off
