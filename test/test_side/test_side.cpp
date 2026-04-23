@@ -78,6 +78,28 @@ void test_suppression_expires_after_2s(void) {
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
 }
 
+void test_manual_toggle_during_peel_does_not_double_switch(void) {
+    SideFSM fsm;
+    uint32_t t = 0;
+    // Establish stable for 200ms
+    drive(fsm, t, 200, 1.0f, +1.0f);
+    // Start a peel (spike) — FSM enters WAITING_SETTLE
+    drive(fsm, t, 100, 1.80f, +1.0f);
+    drive(fsm, t, 100, 0.40f, -1.0f);  // in handling
+    // User manually toggles (unusual but valid)
+    fsm.manual_toggle(t);
+    fsm.consume_switch();
+    // Simulate the device settling back to its original (flipped from A's perspective) orientation
+    // After manual_toggle we're now "on B". If we settle with grav_dot_ref = -1 (flipped from capture),
+    // that means we're at "A physical orientation" — the side-aware check would say "on B, grav < 0" which
+    // does NOT trigger a flip (B expects positive grav_dot_ref). But without the abort fix, the phase
+    // would still be WAITING_SETTLE from before the toggle.
+    drive(fsm, t, 600, 1.0f, -1.0f);
+    // Expected: NO additional switch_pending_.
+    TEST_ASSERT_FALSE(fsm.consume_switch());
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_starts_on_side_a_no_events);
@@ -86,5 +108,6 @@ int main(int, char**) {
     RUN_TEST(test_peel_no_settle_within_timeout_resets);
     RUN_TEST(test_manual_toggle_switches_and_suppresses_auto);
     RUN_TEST(test_suppression_expires_after_2s);
+    RUN_TEST(test_manual_toggle_during_peel_does_not_double_switch);
     return UNITY_END();
 }

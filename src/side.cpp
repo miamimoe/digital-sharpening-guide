@@ -52,6 +52,10 @@ void SideFSM::manual_toggle(uint32_t now_ms) {
     switch_pending_    = true;
     suppress_until_ms_ = now_ms + SUPPRESS_MS;
     suppress_armed_    = true;
+    // Abort any in-progress WAITING_SETTLE to prevent a stale peel from
+    // triggering a spurious second switch against the just-toggled side.
+    phase_             = STABLE;
+    settling_          = false;
 }
 
 bool SideFSM::consume_switch() {
