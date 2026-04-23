@@ -1,0 +1,64 @@
+#pragma once
+#include "types.h"
+#include "stroke.h"
+#include "side.h"
+#include "filter.h"
+
+class App {
+public:
+    struct Tick {
+        uint32_t    now_ms;
+        InputEvent  input;
+        Vec3        accel_g;
+        Vec3        gyro_dps;
+        FaultCode   imu_fault;          // NONE on a normal tick
+    };
+
+    void      begin(bool had_session_in_rtc_ram);
+    void      on_tick(const Tick& t);
+    State     current() const { return state_; }
+
+    // Test-only and main-loop accessors
+    float     target_deg()       const { return target_deg_; }
+    Tolerance tolerance()        const { return tol_; }
+    bool      buzzer_on()        const { return buzzer_on_; }
+    uint32_t  strokes_a()        const { return strokes_a_; }
+    uint32_t  strokes_b()        const { return strokes_b_; }
+    Side      current_side()     const { return side_fsm_.current_side(); }
+    uint32_t  last_activity_ms() const { return last_activity_ms_; }
+    uint32_t  last_stroke_ms()   const { return last_stroke_ms_; }
+
+private:
+    void transition(State to, uint32_t now_ms);
+    void handle_boot            (const Tick& t);
+    void handle_bias_cal        (const Tick& t);
+    void handle_set_target      (const Tick& t);
+    void handle_set_tolerance   (const Tick& t);
+    void handle_active          (const Tick& t);
+    void handle_summary         (const Tick& t);
+    void handle_resume_prompt   (const Tick& t);
+
+    State            state_                = State::BOOT;
+    uint32_t         state_entered_ms_     = 0;
+    uint32_t         last_activity_ms_     = 0;
+    uint32_t         last_stroke_ms_       = 0;
+
+    float            target_deg_           = 17.0f;
+    Tolerance        tol_                  = Tolerance::NORMAL;
+    bool             buzzer_on_            = false;
+    Vec3             g_ref_                = {0.0f, 0.0f, -1.0f};
+    uint32_t         strokes_a_            = 0;
+    uint32_t         strokes_b_            = 0;
+    uint32_t         session_started_ms_   = 0;
+
+    bool             in_preset_mode_       = false;
+    PresetSelection  preset_selection_     = PresetSelection::P12;
+
+    uint32_t         buzzer_flash_until_   = 0;
+    bool             buzzer_flash_showing_ = false;
+
+    MahonyFilter filter_;
+    StrokeFSM    stroke_fsm_;
+    SideFSM      side_fsm_;
+    FaultCode    fault_code_           = FaultCode::NONE;
+};
