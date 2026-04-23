@@ -57,15 +57,15 @@ BOOT + IMU init fail → FAULT (halt, requires power cycle)
 
 All screens render on a 135×240 color LCD.
 
-**BOOT** — 1-second splash: "SHARPENING GUIDE", version number.
+**BOOT** — 2-second splash: "SHARPENING GUIDE", version number. On the first boot after firmware flash (detected via an NVS flag), BOOT is extended into **BIAS_CAL**: display "Hold still — calibrating" with a 10-second countdown while capturing gyro bias. If the device moves during BIAS_CAL (accel magnitude deviation > threshold), the countdown restarts. On completion, bias is written to NVS and the first-boot flag is cleared. Subsequent boots skip straight from splash to SET_TARGET.
 
 **SET_TARGET** — shows live angle (gravity-derived) as a large number. `A`: capture current angle and advance to SET_TOLERANCE. `B`: enter preset mode.
-- Preset mode: `B` cycles **12° / 15° / 17° / 20° / 22°**. `A` confirms selection and advances to SET_TOLERANCE.
+- Preset mode: `B` cycles **12° / 15° / 17° / 20° / 22° / CANCEL**. `A` on a numeric preset confirms and advances to SET_TOLERANCE. `A` on `CANCEL` returns to live-capture mode (the top-level SET_TARGET screen).
 
-**SET_TOLERANCE** — displays current preset (default from NVS). `B` cycles **TIGHT ±1° / NORMAL ±2° / EASY ±3°**. `A` confirms and advances to ACTIVE.
+**SET_TOLERANCE** — displays current preset (default from NVS; on very-first boot, defaults to **NORMAL ±2°**). `B` cycles **TIGHT ±1° / NORMAL ±2° / EASY ±3°**. `A` confirms, persists to NVS, and advances to ACTIVE.
 
 **ACTIVE** — full-screen solid color (blue / green / red) based on angle state. Overlay on top of color:
-- Tiny legend at top: `🔵LOW  🟢OK  🔴HIGH`
+- Tiny legend strip at the top, drawn once on entry: three small colored squares (blue, green, red) with text labels "LOW · OK · HIGH" beside them. No emoji (M5GFX default font does not render color emoji).
 - Current side's stroke count, large (center/lower)
 - Other side's stroke count, small (corner), prefixed with side label (e.g., `B: 11`)
 - No live angle number — the color is the primary signal.
@@ -75,10 +75,12 @@ Color rules:
 - Angle < target − tolerance → **blue** ("raise spine / increase angle").
 - Angle > target + tolerance → **red** ("lower spine / decrease angle").
 
-Transitions:
+Transitions / controls:
 - Long-press `A` (≥800 ms) → SUMMARY.
 - `B` short-press → manual side toggle (override).
+- Long-press `B` (≥800 ms) → toggle buzzer on/off, persist to NVS. Brief on-screen confirmation ("BUZZER ON" / "BUZZER OFF", 800 ms) overlays the color background, then returns to normal render.
 - Motion-spike + settle with inverted gravity sign → auto side switch (Section 4.4).
+- Any `B` press suppresses auto-side-switch for 2 seconds (prevents double-toggle when the user manually overrides during a peel/settle window).
 
 **SUMMARY** — final stats for the ended session:
 - Target angle
@@ -87,29 +89,49 @@ Transitions:
 - Strokes Side B
 - Session duration (MM:SS)
 - `A`: start new session → SET_TARGET.
+- `B`: go to SLEEP without starting a new session (stats preserved in RTC RAM, so wake → RESUME_PROMPT will show them again).
 
-**FAULT** — shown if IMU fails to initialize at boot. Static error message. User must power-cycle. Device does not silently proceed.
+**FAULT** — shown if IMU fails to initialize at boot. Displays:
+- "IMU FAULT"
+- Error code (e.g., `E01` for `begin()` returned false, `E02` for self-test failure, `E03` for WHO_AM_I mismatch — latter is the most likely indicator of the documented MPU6886/AXP192 I²C address conflict).
+- Instruction: "Power-cycle to retry"
+Red LED is solid-on to provide peripheral confirmation. Device does not silently proceed.
 
-**RESUME_PROMPT** — shown on wake from sleep if a session was in progress (had a target angle captured). 5-second countdown:
-- `A` → resume ACTIVE with same target, tolerance, and stroke counts.
+**RESUME_PROMPT** — shown on wake from sleep **only if the device entered sleep from ACTIVE** (or from SUMMARY with preserved stats, entered via `B` in SUMMARY). If sleep was entered from SET_TARGET or SET_TOLERANCE or BOOT, wake goes directly to SET_TARGET. 5-second countdown:
+- `A` → resume ACTIVE with same target, tolerance, and stroke counts from RTC RAM.
 - `B` or timeout → new session → SET_TARGET.
 
 **SLEEP** — display off, LDO3 off, ESP32 deep sleep. Wake via AXP192 power-key.
 
 ### 3.3 Feedback channels (beyond the LCD color)
 
-- **Red LED** — mirrors the HIGH state only (on when screen is red; off otherwise). Provides peripheral-vision cue when eyes are on the blade.
-- **Buzzer** — opt-in via NVS setting. Short beep on transition into out-of-tolerance (either blue or red). No beep returning to green. Default off.
+- **Red LED** — mirrors the HIGH state only (on when screen is red; off otherwise). Provides peripheral-vision cue when eyes are on the blade. Also: solid-on in FAULT state.
+- **Buzzer** — persisted via NVS. Toggled at runtime by long-pressing `B` in ACTIVE (see 3.2). Short beep on transition into out-of-tolerance (either blue or red). No beep returning to green. Default off on first-boot.
 - No haptic (no vibration motor in this kit).
 
 ### 3.4 Persistent settings (NVS, ESP32 Preferences)
 
-| Key | Values | Default |
-|---|---|---|
-| `tolerance` | `TIGHT` / `NORMAL` / `EASY` | `NORMAL` |
-| `buzzer` | `0` / `1` | `0` (off) |
+| Key | Values | Default | Set by |
+|---|---|---|---|
+| `tolerance` | `TIGHT` / `NORMAL` / `EASY` | `NORMAL` | `A` confirm in SET_TOLERANCE |
+| `buzzer` | `0` / `1` | `0` (off) | Long-press `B` in ACTIVE |
+| `gyro_bias_x/y/z` | int16 triplet | zeros | Written on BIAS_CAL completion |
+| `first_boot` | `0` / `1` | `1` (first-boot) | Cleared after BIAS_CAL completes |
 
-Both persist across power cycles. Set via their respective cycling UI; saved on confirm.
+All persist across power cycles.
+
+### 3.5 Session state (RTC RAM, survives deep sleep, lost on battery pull)
+
+| Field | Purpose |
+|---|---|
+| `session_active` | Is there a session to resume? Set on ACTIVE entry, cleared on SUMMARY dismiss via `A` (new session). |
+| `target_angle`, `tolerance_preset` | Current session settings |
+| `g_ref` (3 floats) | Captured reference gravity |
+| `strokes_A`, `strokes_B` | Stroke counts per side |
+| `current_side` | `A` or `B` |
+| `session_started_ms` | For duration calculation |
+
+`session_active == true` at wake → route to RESUME_PROMPT. `false` → route to SET_TARGET.
 
 ## 4. Technical design
 
@@ -140,7 +162,7 @@ Gains (`Kp`, `Ki`) are placeholders at defaults; **must be tuned on hardware aga
 
 ### 4.3 Angle computation (orientation-agnostic)
 
-At capture time (either via "capture" mode or preset confirm), snapshot the current gravity unit vector `g_ref` (3 components in device frame).
+At capture time (either via "capture" mode or preset confirm), snapshot the current gravity unit vector `g_ref` (3 components in device frame, from the Mahony filter output).
 
 **Magnitude of deviation:**
 
@@ -148,63 +170,89 @@ At capture time (either via "capture" mode or preset confirm), snapshot the curr
 θ = acos( dot(g_ref, g_now) ) * 180/π     // unsigned degrees from reference
 ```
 
-Completely axis-label-free. Works regardless of how the user rotated the device when sticking it to the blade.
+Axis-label-free. Works regardless of how the user rotated the device when sticking it to the blade.
 
-**Direction of deviation** (for blue vs red): exploits the fact that the magnet geometry fixes the device's back surface against the blade's flat. The device's local axis perpendicular to the back (`n_back`, a fixed vector in device frame) always points into the blade.
+**Direction of deviation** (for blue vs red): exploits the fact that the magnet geometry fixes the device's back surface against the blade's flat. The device's local axis perpendicular to the back (`n_back`, a fixed unit vector in device frame) always points into the blade. On M5StickC Plus, the IMU is soldered such that the screen is on the opposite face from the back; by the M5Stack schematic, `n_back = (0, 0, -1)` in the MPU6886's body frame (i.e., the negative local Z-axis). The exact sign is validated by a simple bring-up test: place the device flat on a table, screen up, and confirm `g·n_back < 0` (gravity's Z-component is −1 g when Z points up); the code flips the `n_back` sign at a single compile-time constant if the empirical convention differs.
 
-As the user rocks the blade on the stone, the blade's flat — and therefore `n_back` in the world frame — rotates relative to vertical. This rotation causes gravity's projection onto `n_back` (in device frame) to change monotonically with sharpening angle:
-
-- Raising the spine (**higher** sharpening angle) → blade more vertical → `n_back` rotates toward horizontal → `|dot(g, n_back)|` decreases
-- Lowering the spine (**lower** angle) → blade more horizontal → `n_back` rotates toward vertical → `|dot(g, n_back)|` increases
-
-Computed directional signal:
+Using signed `g·n_back` (NOT absolute value), the relationship to sharpening angle θ_s is:
 
 ```
-δ = |dot(g_now, n_back)| − |dot(g_ref, n_back)|
+g · n_back = sin(θ_s)    (monotonic for θ_s ∈ (−90°, 90°), which covers all practical sharpening)
 ```
 
-- `δ > 0` → angle **decreased** → **BLUE** (raise the spine)
-- `δ < 0` → angle **increased** → **RED** (lower the spine)
+This follows because the blade's flat is perpendicular to `n_back`, and the sharpening angle is by definition the tilt between the flat and the stone (gravity-perpendicular).
+
+Directional signal:
+
+```
+α_ref = dot(g_ref, n_back)
+α_now = dot(g_now, n_back)
+δ     = α_now − α_ref
+```
+
+- `δ > 0` → angle **increased** → **RED** (lower the spine)
+- `δ < 0` → angle **decreased** → **BLUE** (raise the spine)
 - Only evaluated when `θ > tolerance`; otherwise → **GREEN**
 
-`n_back` is a compile-time constant determined by the fixed IMU orientation on the M5StickC Plus PCB (no user calibration needed). The sign convention is set once in firmware and does not depend on how the user rotated the device around `n_back` when mounting — so orientation-agnostic capture holds for both magnitude AND direction.
+**Orientation-agnostic under device rotation:** rotating the device around `n_back` (i.e., spinning it in the plane of the blade flat when mounting) leaves `g · n_back` unchanged, so both magnitude `θ` and direction `δ` are invariant under that rotation. The user does not have to think about which way is "up" when sticking the device on.
 
 ### 4.4 Stroke and side detection
 
-**Stroke counter** — finite state machine per-side:
-- `IN_TOL`: current angle within target ± tolerance for ≥ **300 ms**.
-- `OUT_TOL`: outside tolerance for ≥ **200 ms**.
-- A stroke is counted on the `IN_TOL → OUT_TOL` transition.
-- Edge case: an unbroken `IN_TOL` period > 3 seconds still counts as exactly one stroke (counted on its eventual exit). Documented in code.
+**Stroke definition:** one stroke = one complete "held at target angle" period, bookended by a departure. The user's act of lifting the blade from the stone, or deliberately drifting off angle between passes, produces the OUT window that ends a stroke. Passes that never enter tolerance (i.e., the user never held within ± tolerance for ≥ 300 ms) are **by design not counted** — the entire point of the counter is to count *good* strokes per side.
+
+**Stroke counter FSM** (per-side):
+- `OUT_TOL`: initial state. Track how long angle has been outside tolerance.
+- Enter `IN_TOL` when angle has been within tolerance for ≥ **300 ms** continuously.
+- Re-enter `OUT_TOL` when angle has been outside tolerance for ≥ **200 ms** continuously (hysteresis).
+- **A stroke is counted on each `IN_TOL → OUT_TOL` transition.**
+- Edge case: an unbroken `IN_TOL` period longer than 3 seconds still counts as exactly one stroke, counted on its eventual exit. Documented in code as the expected behavior — users won't hit this in practice since lifting the blade at the end of each pass naturally produces an OUT window.
 - The 300 ms / 200 ms thresholds are initial estimates; tuning against real sharpening sessions post-delivery is a known risk.
 
-**Side detection** — motion-spike + gravity-sign:
-- **Spike event:** accelerometer magnitude deviates from 1 g by more than a threshold (e.g., > 0.5 g for ≥ 500 ms). This indicates the device is being handled (peeled off, moved).
-- **Settle event:** after a spike, gravity magnitude returns to ~1 g and stays stable for ≥ 500 ms.
+**Side detection — motion-spike + gravity-sign:**
+- **Spike event:** accelerometer magnitude deviates from 1 g by more than **0.5 g peak** during a 100 ms window. Peels of the magnet from the blade are sharp/fast events; this must not require a long sustained high-magnitude period.
+- **Settle event:** after a spike, accel magnitude returns to within 0.1 g of 1 g and stays stable for ≥ **500 ms**.
 - On settle, compute `sign(dot(g_now, g_ref))`:
-  - **Negative** (flipped) → auto side switch. Other side's counter becomes current.
-  - **Positive** (same side) → no change (user picked up and set back down).
-- **Timeout:** if no settle occurs within 2 seconds of a spike, ignore the spike (classify as ongoing handling).
-- Current side's stroke counter is not reset on switch; we persist both counters for the session.
+  - **Negative** (flipped) → auto side switch. Counter for the other side becomes the active one (both counters persist; neither resets mid-session).
+  - **Positive** (same side) → no change.
+- **Timeout:** if no settle occurs within 5 seconds of a spike, reset detection (classify as ongoing handling; the user can still reach settle later and trigger switch).
+- **B-press suppression:** after any `B` press in ACTIVE, auto-side-switch is suppressed for 2 seconds (prevents double-toggle with a manual override that coincides with handling motion).
 
 **Manual override:** short-press `B` in ACTIVE swaps current side regardless of sensor state.
 
 ### 4.5 Display rendering
 
-- **Library:** M5GFX via the official `M5StickCPlus` Arduino package.
-- **Dirty-region only**: never do full-frame redraws.
-  - Background color (blue/green/red) → redrawn **only on state change**.
-  - Stroke count numbers → redrawn **only on increment**.
+- **Library:** M5GFX (bundled transitively with `m5stack/M5Unified`, the current standard library for M5Stack boards).
+- **Dirty-region only**: never do full-frame redraws during steady-state ACTIVE.
+  - Background color (blue/green/red) → redrawn **only on state change** (blue↔green↔red).
+  - Stroke count numbers → redrawn **only on increment or side switch**.
   - Side label → redrawn on side switch.
-  - Legend strip → drawn once on entry to ACTIVE.
-- Full frame (135×240 × 16bpp = 64 KB) at 27 MHz SPI ≈ 19 ms. Dirty-region keeps rendering well under budget at 20 Hz.
+  - Legend strip → drawn once on entry to ACTIVE, never redrawn.
+- Full frame (135×240 × 16 bpp ≈ 64 KB) at 27 MHz SPI ≈ 19 ms, which exceeds the 10 ms loop tick. Dirty-region keeps steady-state renders well under the 20 Hz budget. State-transition ticks that require a full-screen fill (e.g., blue→red) consume up to ~20 ms; those ticks are allowed to skip the next loop iteration's sensor sample without user-visible effect (10 Hz effective sample during that single transition; the Mahony filter tolerates a single sample dropout).
 
 ### 4.6 Power management
 
-- Motion idle detection: IMU accel magnitude deviation < small threshold for 90 s → dim backlight to 10 %. Continued idle for another 30 s → enter SLEEP.
-- Before `esp_deep_sleep_start()`: **`M5.Axp.SetLDO3(false)`** to cut backlight power (otherwise backlight stays on and drains battery).
-- Wake source: AXP192 power-key interrupt (not raw GPIO) — known M5StickC Plus-specific requirement.
-- On wake, check for an in-progress session in RAM (preserved via RTC RAM or rehydrated from last-written NVS) → route to RESUME_PROMPT or SET_TARGET accordingly.
+Idle/sleep criteria differ by state:
+
+| State | Dim backlight at | Enter SLEEP at |
+|---|---|---|
+| BOOT / BIAS_CAL | never (short-lived) | never |
+| SET_TARGET | 90 s no-motion | 120 s no-motion |
+| SET_TOLERANCE | 60 s no-motion | 90 s no-motion |
+| ACTIVE | 3 min no-new-strokes | **5 min no-new-strokes** (motion-agnostic — user may pause between passes to check edge, wet stone, etc. without losing the session) |
+| SUMMARY | 60 s | 90 s |
+| RESUME_PROMPT | n/a | on 5 s timeout |
+| FAULT | never | never (user must power-cycle) |
+
+Sleep sequence:
+1. Call `M5.Axp.SetLDO3(false)` to cut backlight power (otherwise backlight stays lit during deep sleep and drains the battery — documented M5StickC Plus-specific behavior).
+2. Save session state to RTC RAM if `state == ACTIVE` at sleep entry (see 3.5).
+3. `esp_deep_sleep_start()` with wake source set to AXP192 power-key interrupt (not a raw GPIO) — documented M5StickC Plus-specific requirement.
+
+On wake:
+- Read RTC RAM `session_active` flag.
+- `true` → RESUME_PROMPT (session still in RTC RAM).
+- `false` → SET_TARGET.
+- RTC RAM is lost on battery pull or on AXP192 power-off (long power-key hold); that is acceptable — session preservation is a convenience, not a promise.
 
 ### 4.7 Module breakdown
 
@@ -214,7 +262,7 @@ Logical modules (separate files in `src/`):
 |---|---|
 | `imu` | MPU6886 read + 10-second still-gyro bias capture at first boot (NVS) |
 | `filter` | Mahony AHRS; outputs quaternion + gravity unit vector |
-| `angle` | Pure function: `(g_ref, g_now) → (degrees, direction_sign)` — uses compile-time `n_back` constant |
+| `angle` | Pure function: `(g_ref, g_now) → (degrees, direction_sign)` — uses compile-time `n_back` constant. No state. |
 | `stroke` | In/out hysteresis FSM per side |
 | `side` | Spike/settle detection + gravity-sign compare + manual override |
 | `ui` | M5GFX render; pure "draw current state" — no logic |
@@ -231,16 +279,18 @@ Gravity-sign tracking lives in `side`, not `angle`, to keep `angle` a pure funct
 - **Framework:** Arduino.
 - **Build:** PlatformIO.
 - **`platformio.ini` env:** `m5stick-c-plus`.
-- **Key libraries:** `m5stack/M5StickCPlus`, `M5GFX` (bundled transitively). Mahony AHRS implementation inlined (public domain, ~80 LOC).
+- **Key library:** `m5stack/M5Unified` (bundles M5GFX and the board HAL; M5Unified is the current standard and supersedes the older per-board `M5StickCPlus` package). Mahony AHRS implementation inlined (public-domain reference implementation, ~100 LOC including the fast-inverse-sqrt helper).
 - **Minimum toolchain:** Arduino-ESP32 core 2.x, PlatformIO 6.x.
 
 ## 6. Testing
 
 ### 6.1 Desktop unit tests (no hardware required)
 
-- `angle.compute()`: feed canned `g_ref` + `g_now` pairs, assert degrees and direction sign.
-- Stroke FSM: feed synthetic in/out-of-tolerance event sequences, assert expected counts including the >3 s unbroken edge case.
-- Side FSM: feed synthetic spike/settle/sign sequences including the 2 s handling timeout case.
+All FSM tests use a pseudo-sample stream: a text fixture file of `(t_ms, ax, ay, az, gx, gy, gz)` rows fed into the module under test, asserting expected event emissions.
+
+- **`angle.compute()`**: feed canned `g_ref` + `g_now` pairs, assert θ degrees (within 0.01°) and direction sign. Include coverage for: zero-deviation (θ=0, δ=0), ±5° deviation both signs, edge cases near the tolerance boundaries.
+- **Stroke FSM**: feed synthetic `(t_ms, in_tolerance_bool)` sequences, assert expected stroke counts. Include coverage for: canonical 3-stroke session, sub-300 ms in-tolerance blips (must not count), sub-200 ms out-of-tolerance wobbles (must not re-arm), the > 3 s unbroken in-tolerance edge case (counts as 1), back-to-back valid strokes.
+- **Side FSM**: feed synthetic `(t_ms, accel_magnitude, gravity_sign)` sequences, assert expected side-switch emissions. Include coverage for: peel/flip/settle (switches), peel/no-flip/settle (doesn't switch), peel/no-settle-within-5s (reset), B-press suppression window (suppresses auto-switch for 2 s).
 
 ### 6.2 On-hardware validation (once kit arrives)
 
@@ -277,17 +327,18 @@ All of the above are candidates for v2 once the v1 loop is validated with real s
 
 ## 9. Appendix — decisions locked during brainstorm
 
-1. Target-angle input: capture + presets
-2. Axis detection: orientation-agnostic (gravity-vector dot product)
-3. Tolerance: 3 user-selectable presets at session start (±1° / ±2° / ±3°)
+1. Target-angle input: capture + presets (**12° / 15° / 17° / 20° / 22° / CANCEL**); A on CANCEL returns to live capture
+2. Axis detection: orientation-agnostic (`sin(θ) = dot(g, n_back)` — signed, monotonic)
+3. Tolerance: 3 user-selectable presets at session start (±1° / ±2° / ±3°), persisted in NVS
 4. Mounting: magnet glued directly to device back
-5. Feedback: tri-color screen (blue/green/red) + red LED + opt-in buzzer
-6. Presets: 12° / 15° / 17° / 20° / 22°
-7. Stroke detection: auto, in/out hysteresis with min durations
-8. Side switch: auto via peel/settle + gravity sign; manual override on B
-9. Session lifecycle: explicit, long-press A ends; auto-sleep on idle
-10. Wake behavior: 5-second resume prompt, default to new session
-11. Active screen: solid-color full-background + large current-side count + small other-side count
-12. Framework: Arduino + PlatformIO + M5StickCPlus library
-13. Persistence: tolerance + buzzer in NVS
-14. Out of scope v1: BLE, logging, companion app, OTA
+5. Feedback: tri-color screen (blue/green/red) + red LED (on in HIGH and FAULT) + opt-in buzzer (toggle via long-press B in ACTIVE, persisted)
+6. Stroke detection: auto, in/out hysteresis with 300 ms / 200 ms min durations. Sloppy passes that never enter tolerance don't count (by design).
+7. Side switch: auto via peel-spike (>0.5 g peak in 100 ms) + settle + gravity-sign compare; manual override on B short-press; B-press suppression 2 s to prevent double-toggle
+8. Session lifecycle: explicit, long-press A in ACTIVE ends; idle-sleep criterion in ACTIVE = 5 min with no new strokes (motion-agnostic). B in SUMMARY = sleep without starting new session
+9. Wake behavior: RESUME_PROMPT only shown if sleep entered from ACTIVE (or SUMMARY with preserved stats); otherwise wake → SET_TARGET. 5 s resume-prompt timeout → new session
+10. Active screen: solid-color full-background + large current-side count + small other-side count. No live angle number. No emoji — text + colored primitives only.
+11. First-boot: BIAS_CAL state captures gyro bias (10 s still) before first use; persisted to NVS
+12. Framework: Arduino + PlatformIO + `m5stack/M5Unified`
+13. Persistence: tolerance, buzzer, gyro bias, first-boot flag in NVS; session state in RTC RAM
+14. FAULT state on IMU init failure: displays error code (E01/E02/E03), red LED solid, requires power-cycle
+15. Out of scope v1: BLE, logging/history, companion app, OTA, battery SoC display, per-stroke analytics, custom preset dial-in, recalibration UI beyond first-boot
