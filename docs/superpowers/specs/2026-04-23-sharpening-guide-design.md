@@ -140,17 +140,34 @@ Gains (`Kp`, `Ki`) are placeholders at defaults; **must be tuned on hardware aga
 
 ### 4.3 Angle computation (orientation-agnostic)
 
-At capture time (either via "capture" mode or preset confirm), snapshot the current gravity unit vector `g_ref` (3 components).
+At capture time (either via "capture" mode or preset confirm), snapshot the current gravity unit vector `g_ref` (3 components in device frame).
 
-Live sharpening angle:
+**Magnitude of deviation:**
 
 ```
-θ = acos( dot(g_ref, g_now) )   // radians, convert to degrees
+θ = acos( dot(g_ref, g_now) ) * 180/π     // unsigned degrees from reference
 ```
 
-Completely axis-label-free. Works regardless of how the user oriented the device when sticking it to the blade.
+Completely axis-label-free. Works regardless of how the user rotated the device when sticking it to the blade.
 
-**Direction of deviation** (for blue vs red): at capture, also snapshot which local IMU axis is most aligned with the expected "tilt" direction (the axis most orthogonal to gravity at the moment of capture, projected into the device frame). The sign of the current gravity vector's projection onto that axis, compared to capture, tells us whether the angle increased (red) or decreased (blue).
+**Direction of deviation** (for blue vs red): exploits the fact that the magnet geometry fixes the device's back surface against the blade's flat. The device's local axis perpendicular to the back (`n_back`, a fixed vector in device frame) always points into the blade.
+
+As the user rocks the blade on the stone, the blade's flat — and therefore `n_back` in the world frame — rotates relative to vertical. This rotation causes gravity's projection onto `n_back` (in device frame) to change monotonically with sharpening angle:
+
+- Raising the spine (**higher** sharpening angle) → blade more vertical → `n_back` rotates toward horizontal → `|dot(g, n_back)|` decreases
+- Lowering the spine (**lower** angle) → blade more horizontal → `n_back` rotates toward vertical → `|dot(g, n_back)|` increases
+
+Computed directional signal:
+
+```
+δ = |dot(g_now, n_back)| − |dot(g_ref, n_back)|
+```
+
+- `δ > 0` → angle **decreased** → **BLUE** (raise the spine)
+- `δ < 0` → angle **increased** → **RED** (lower the spine)
+- Only evaluated when `θ > tolerance`; otherwise → **GREEN**
+
+`n_back` is a compile-time constant determined by the fixed IMU orientation on the M5StickC Plus PCB (no user calibration needed). The sign convention is set once in firmware and does not depend on how the user rotated the device around `n_back` when mounting — so orientation-agnostic capture holds for both magnitude AND direction.
 
 ### 4.4 Stroke and side detection
 
@@ -197,7 +214,7 @@ Logical modules (separate files in `src/`):
 |---|---|
 | `imu` | MPU6886 read + 10-second still-gyro bias capture at first boot (NVS) |
 | `filter` | Mahony AHRS; outputs quaternion + gravity unit vector |
-| `angle` | Pure function: `(g_ref, g_now, axis_hint) → (degrees, direction_sign)` |
+| `angle` | Pure function: `(g_ref, g_now) → (degrees, direction_sign)` — uses compile-time `n_back` constant |
 | `stroke` | In/out hysteresis FSM per side |
 | `side` | Spike/settle detection + gravity-sign compare + manual override |
 | `ui` | M5GFX render; pure "draw current state" — no logic |
