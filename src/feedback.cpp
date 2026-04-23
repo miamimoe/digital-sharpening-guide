@@ -7,7 +7,6 @@ namespace {
     constexpr int      LED_PIN        = 10;     // M5StickC Plus red LED GPIO (active LOW)
     constexpr float    BEEP_HZ        = 2000.0f;
     constexpr uint32_t BEEP_MS        = 80;
-    uint32_t           s_beep_until   = 0;
 }
 
 namespace feedback {
@@ -27,15 +26,6 @@ void fault_led() {
 
 void beep_out_of_tolerance() {
     M5.Speaker.tone(BEEP_HZ, BEEP_MS);
-    s_beep_until = millis() + BEEP_MS + 10;
-}
-
-void tick(uint32_t now_ms) {
-    // M5.Speaker.tone stops itself after the duration — this function exists
-    // to give callers a hook for more sophisticated beep scheduling in v2.
-    if (s_beep_until && now_ms > s_beep_until) {
-        s_beep_until = 0;
-    }
 }
 
 } // namespace feedback
@@ -47,6 +37,5 @@ namespace feedback {
     void set_color(ColorState) {}
     void fault_led() {}
     void beep_out_of_tolerance() {}
-    void tick(uint32_t) {}
 }
 #endif

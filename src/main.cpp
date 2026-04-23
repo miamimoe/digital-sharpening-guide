@@ -87,8 +87,6 @@ void loop() {
     App::Tick tick{now, ev, accel, gyro, fault};
     g_app.on_tick(tick);
 
-    feedback::tick(now);
-
     // Sleep check uses App's real last-activity / last-stroke timestamps.
     if (power::check_idle(now, g_app.current(),
                           g_app.last_activity_ms(),
