@@ -57,14 +57,14 @@ void update_backlight(uint32_t now_ms, State current,
 
 #ifndef UNIT_TEST
 [[noreturn]] void enter_deep_sleep() {
-    // Cut backlight via M5Unified's power abstraction. On M5StickC Plus this
-    // routes to AXP192 LDO3 which otherwise stays on during deep sleep.
+    // Cut the display fully — Display::sleep() routes through the board HAL to
+    // disable both the backlight LED AND the ST7789's internal power. This is
+    // more reliable than setBrightness(0) which only PWMs to zero but leaves
+    // the AXP192 LDO3 supplying quiescent current.
+    M5.Display.sleep();
     M5.Display.setBrightness(0);
-    M5.Power.setExtOutput(false);
 
-    // Wake from power key: on M5StickC Plus the AXP192 PEK is routed to GPIO35.
-    // If board revision differs and button isn't recognized after deep sleep,
-    // bring-up checklist item 9 tracks the fallback (trying GPIO37 for BtnA).
+    // Wake from power key: M5StickC Plus routes the AXP192 PEK through GPIO35.
     const uint64_t WAKE_MASK = (1ULL << 35);
     esp_sleep_enable_ext1_wakeup(WAKE_MASK, ESP_EXT1_WAKEUP_ALL_LOW);
     esp_deep_sleep_start();
