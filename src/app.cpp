@@ -28,8 +28,6 @@ static Tolerance next_tolerance(Tolerance t) {
 }
 
 void App::begin(bool had_session_in_rtc_ram) {
-    settings::begin();
-    session::begin();
     filter_.begin(50.0f);
     filter_.set_bias(settings::load_gyro_bias());
     buzzer_on_ = settings::load_buzzer();
