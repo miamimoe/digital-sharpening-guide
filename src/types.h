@@ -55,7 +55,7 @@ inline float tolerance_degrees(Tolerance t) {
         case Tolerance::NORMAL: return 2.0f;
         case Tolerance::EASY:   return 3.0f;
     }
-    return 2.0f;
+    __builtin_unreachable();
 }
 
 inline float preset_degrees(PresetSelection p) {
@@ -67,5 +67,5 @@ inline float preset_degrees(PresetSelection p) {
         case PresetSelection::P22:    return 22.0f;
         case PresetSelection::CANCEL: return 0.0f;
     }
-    return 17.0f;
+    __builtin_unreachable();
 }
