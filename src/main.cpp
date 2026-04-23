@@ -1,11 +1,106 @@
 #ifndef UNIT_TEST
 #include <Arduino.h>
+#include <M5Unified.h>
+#include <esp_sleep.h>
+
+#include "app.h"
+#include "imu.h"
+#include "input.h"
+#include "settings.h"
+#include "session.h"
+#include "ui.h"
+#include "feedback.h"
+#include "power.h"
+
+static App       g_app;
+static InputFSM  g_input;
+
+static uint32_t  g_next_tick_ms       = 0;
+static constexpr uint32_t TICK_PERIOD_MS = 10; // 100 Hz
 
 void setup() {
-    // wired in Task 14
+    auto cfg = M5.config();
+    cfg.internal_imu = true;
+    cfg.internal_spk = true;
+    M5.begin(cfg);
+
+    ui::begin();
+    feedback::begin();
+    power::begin();
+    settings::begin();
+    session::begin();
+
+    // Detect wake-with-session: only route to RESUME_PROMPT if we actually
+    // deep-slept AND the session-state in RTC RAM is marked active.
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    bool had_session_in_rtc = (cause != ESP_SLEEP_WAKEUP_UNDEFINED) && session::has_session();
+
+    FaultCode fc = imu::begin();
+
+    // First-boot gyro bias capture: run BEFORE handing control to App so the
+    // filter has a valid bias from the start. App::handle_bias_cal still
+    // draws the 10s countdown and clears first_boot on completion.
+    if (fc == FaultCode::NONE && settings::is_first_boot()) {
+        ui::draw_bias_cal(10);
+        Vec3 bias;
+        if (imu::capture_gyro_bias(bias)) {
+            settings::save_gyro_bias(bias);
+        }
+        // If capture fails (device never stilled for 60s), we just proceed
+        // with zero bias; the state machine's BIAS_CAL screen will then
+        // complete its own 10s countdown and move on.
+    }
+
+    g_app.begin(had_session_in_rtc);
+
+    // Push initial fault if IMU failed.
+    if (fc != FaultCode::NONE) {
+        App::Tick t{millis(), InputEvent::NONE, {0,0,-1}, {0,0,0}, fc};
+        g_app.on_tick(t);
+    }
+
+    g_next_tick_ms = millis();
 }
 
 void loop() {
-    // wired in Task 14
+    uint32_t now = millis();
+    if ((int32_t)(now - g_next_tick_ms) < 0) {
+        delay(1);
+        return;
+    }
+    g_next_tick_ms += TICK_PERIOD_MS;
+
+    M5.update();
+    bool a_pressed = M5.BtnA.isPressed();
+    bool b_pressed = M5.BtnB.isPressed();
+    InputEvent ev = g_input.update(now, a_pressed, b_pressed);
+
+    Vec3 accel, gyro;
+    FaultCode fault = FaultCode::NONE;
+    if (!imu::read(accel, gyro)) {
+        fault = FaultCode::E02_SELF_TEST_FAILED;
+        accel = {0,0,-1};
+        gyro  = {0,0,0};
+    }
+
+    App::Tick tick{now, ev, accel, gyro, fault};
+    g_app.on_tick(tick);
+
+    feedback::tick(now);
+
+    // Sleep check uses App's real last-activity / last-stroke timestamps.
+    if (power::check_idle(now, g_app.current(),
+                          g_app.last_activity_ms(),
+                          g_app.last_stroke_ms())) {
+        power::enter_deep_sleep();
+    }
+    power::update_backlight(now, g_app.current(),
+                            g_app.last_activity_ms(),
+                            g_app.last_stroke_ms());
+
+    // If state entered SLEEP explicitly (e.g., B in SUMMARY), trigger sleep now.
+    if (g_app.current() == State::SLEEP) {
+        power::enter_deep_sleep();
+    }
 }
 #endif
