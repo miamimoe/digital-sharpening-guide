@@ -40,13 +40,18 @@ void update_backlight(uint32_t now_ms, State current,
                       uint32_t last_activity_ms, uint32_t last_stroke_ms)
 {
     auto cfg = config_for(current);
+    // ACTIVE uses 50% baseline — color is the primary signal and is easily
+    // read peripherally at half-brightness. Other states use 100% for
+    // readable text/numbers.
+    uint8_t baseline_pct = (current == State::ACTIVE) ? 50 : 100;
+
     if (cfg.dim_ms == 0) {
-        ui::set_backlight(100);
+        ui::set_backlight(baseline_pct);
         return;
     }
     uint32_t reference = (current == State::ACTIVE) ? last_stroke_ms : last_activity_ms;
     uint32_t idle = now_ms - reference;
-    uint8_t pct = (idle >= cfg.dim_ms) ? 10 : 100;
+    uint8_t pct = (idle >= cfg.dim_ms) ? 10 : baseline_pct;
     ui::set_backlight(pct);
 }
 
