@@ -238,6 +238,44 @@ void test_zero_cal_long_a_aborts_to_set_target(void) {
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
 }
 
+void test_zero_cal_abort_mid_capture_then_reenter_completes(void) {
+    // Abort during CAPTURE_A, re-enter ZERO_CAL via SET_TARGET -> SET_TOLERANCE,
+    // and verify the second flow completes cleanly (FSM was properly reset).
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TARGET -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TOLERANCE -> ZERO_CAL (PROMPT_A)
+
+    Vec3 still_a = {0.0f, 0.0f, -1.0f};
+    Vec3 still_g = {0.0f, 0.0f,  0.0f};
+
+    // Start CAPTURE_A and feed a partial window of still ticks (mid-capture).
+    advance(a, t, 100, InputEvent::A_SHORT, still_a, still_g);
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::CAPTURE_A, (int)a.zero_cal_substate());
+    advance(a, t, 600, InputEvent::NONE, still_a, still_g);  // partial: not done
+
+    // Abort mid-capture.
+    advance(a, t, 100, InputEvent::A_LONG);
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
+
+    // Re-enter ZERO_CAL via the normal cold-start path.
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TARGET -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TOLERANCE -> ZERO_CAL
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_A, (int)a.zero_cal_substate());
+
+    // Capture A then B; full flow must complete cleanly.
+    advance(a, t, 100, InputEvent::A_SHORT, still_a, still_g);
+    advance(a, t, 1600, InputEvent::NONE, still_a, still_g);
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_B, (int)a.zero_cal_substate());
+
+    Vec3 still_b = {0.0f, 0.0f, +1.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, still_b, still_g);
+    advance(a, t, 1600, InputEvent::NONE, still_b, still_g);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_without_session_goes_to_set_target);
@@ -255,5 +293,6 @@ int main(int, char**) {
     RUN_TEST(test_imu_fault_at_boot_goes_to_fault);
     RUN_TEST(test_zero_cal_two_capture_flow_advances_to_active);
     RUN_TEST(test_zero_cal_long_a_aborts_to_set_target);
+    RUN_TEST(test_zero_cal_abort_mid_capture_then_reenter_completes);
     return UNITY_END();
 }

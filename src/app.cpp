@@ -175,18 +175,8 @@ void App::handle_zero_cal(const Tick& t) {
             zc_fsm_.update(t.accel_g, t.gyro_dps);
             if (zc_fsm_.done()) {
                 on_capture_done(g_zero_B_, ZeroCalSubstate::DONE);
-                // Persist immediately and enter ACTIVE.
-                SessionState ss;
-                ss.active             = true;
-                ss.target_deg         = target_deg_;
-                ss.tolerance          = tol_;
-                ss.g_zero_A           = g_zero_A_;
-                ss.g_zero_B           = g_zero_B_;
-                ss.strokes_A          = 0;
-                ss.strokes_B          = 0;
-                ss.current_side       = Side::A;
-                ss.session_started_ms = t.now_ms;
-                session::mark_active(ss);
+                // transition(ACTIVE) builds SessionState and calls mark_active itself.
+                session_started_ms_ = t.now_ms;
                 transition(State::ACTIVE, t.now_ms);
             }
             break;
