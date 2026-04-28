@@ -22,5 +22,10 @@ namespace ui {
     void draw_fault(FaultCode code);
     void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b, int seconds_remaining);
 
+    // step: 1 (side A) or 2 (side B). retry: true if last attempt failed stillness gate.
+    void draw_zero_cal_prompt(int step, bool retry);
+    // remaining_ms: time left in current capture window (warmup or averaging combined).
+    void draw_zero_cal_progress(int remaining_ms);
+
     void set_backlight(uint8_t percent); // 0..100
 }

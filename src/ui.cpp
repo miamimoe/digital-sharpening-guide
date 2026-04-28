@@ -198,6 +198,44 @@ void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b,
     M5.Display.setCursor(5, 200); M5.Display.print("A:Resume  B:New");
 }
 
+void draw_zero_cal_prompt(int step, bool retry) {
+    auto& d = M5.Display;
+    d.fillScreen(COL_BLACK);
+    d.setTextColor(COL_WHITE, COL_BLACK);
+    d.setTextSize(2);
+    d.setCursor(8, 8);
+    d.printf("ZERO CAL  %d/2", step);
+
+    d.setCursor(8, 50);
+    if (step == 1) d.print("Lay knife flat");
+    else           d.print("Flip; lay flat");
+
+    d.setCursor(8, 90);
+    d.print("Press A");
+
+    d.setCursor(8, 130);
+    d.print("Hold still");
+
+    if (retry) {
+        d.setTextColor(COL_RED, COL_BLACK);
+        d.setCursor(8, 180);
+        d.setTextSize(3);
+        d.print("HOLD STILL");
+    }
+}
+
+void draw_zero_cal_progress(int remaining_ms) {
+    auto& d = M5.Display;
+    d.fillScreen(COL_BLACK);
+    d.setTextColor(COL_WHITE, COL_BLACK);
+    d.setTextSize(3);
+    d.setCursor(8, 60);
+    d.print("Hold still");
+    d.setTextSize(4);
+    d.setCursor(8, 120);
+    d.printf("%d.%ds", remaining_ms / 1000, (remaining_ms % 1000) / 100);
+}
+
 void set_backlight(uint8_t percent) {
     if (percent > 100) percent = 100;
     M5.Display.setBrightness((uint8_t)(percent * 255u / 100u));
@@ -218,6 +256,8 @@ namespace ui {
     void draw_summary(float, Tolerance, uint32_t, uint32_t, uint32_t) {}
     void draw_fault(FaultCode) {}
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
+    void draw_zero_cal_prompt(int, bool) {}
+    void draw_zero_cal_progress(int) {}
     void set_backlight(uint8_t) {}
 }
 #endif

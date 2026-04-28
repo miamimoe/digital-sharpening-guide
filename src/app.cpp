@@ -177,6 +177,20 @@ void App::handle_zero_cal(const Tick& t) {
             // Should not be reached — DONE triggers the transition above.
             break;
     }
+
+    int total_capture_ms_remaining =
+        zc_fsm_.warmup_remaining()    * 10 +
+        zc_fsm_.averaging_remaining() * 10;
+
+    bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
+
+    switch (zc_substate_) {
+        case ZeroCalSubstate::PROMPT_A:  ui::draw_zero_cal_prompt(1, retry); break;
+        case ZeroCalSubstate::CAPTURE_A: ui::draw_zero_cal_progress(total_capture_ms_remaining); break;
+        case ZeroCalSubstate::PROMPT_B:  ui::draw_zero_cal_prompt(2, retry); break;
+        case ZeroCalSubstate::CAPTURE_B: ui::draw_zero_cal_progress(total_capture_ms_remaining); break;
+        case ZeroCalSubstate::DONE:      break;
+    }
 }
 
 void App::handle_set_target(const Tick& t) {
