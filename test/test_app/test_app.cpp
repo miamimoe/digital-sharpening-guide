@@ -24,6 +24,20 @@ void setUp(void) {
 }
 void tearDown(void) {}
 
+// Reach ACTIVE via the resume-prompt path, which bypasses ZERO_CAL.
+// This is the correct path for tests that need to exercise ACTIVE state
+// now that SET_TOLERANCE → ZERO_CAL (not ACTIVE) since Task 7.
+static void reach_active(App& a, uint32_t& t) {
+    SessionState s;
+    s.target_deg = 17.0f;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
+    session::mark_active(s);
+    a.begin(true);                                  // lands in RESUME_PROMPT
+    advance(a, t, 100, InputEvent::A_SHORT);        // RESUME_PROMPT → ACTIVE
+}
+
 void test_boot_without_session_goes_to_set_target(void) {
     App a;
     a.begin(false);
@@ -123,33 +137,28 @@ void test_preset_cancel_returns_to_live_capture(void) {
 }
 
 void test_tolerance_a_confirms_and_advances(void) {
+    // SET_TOLERANCE → ZERO_CAL (not ACTIVE) since Task 7.
     App a;
     a.begin(false);
     uint32_t t = 0;
     advance(a, t, 2100);
-    advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT);
-    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET → SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE → ZERO_CAL
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
 }
 
 void test_active_long_a_goes_to_summary(void) {
     App a;
-    a.begin(false);
     uint32_t t = 0;
-    advance(a, t, 2100);
-    advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT);
+    reach_active(a, t);
     advance(a, t, 100, InputEvent::A_LONG);
     TEST_ASSERT_EQUAL_INT((int)State::SUMMARY, (int)a.current());
 }
 
 void test_summary_a_starts_new_session(void) {
     App a;
-    a.begin(false);
     uint32_t t = 0;
-    advance(a, t, 2100);
-    advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT);
+    reach_active(a, t);
     advance(a, t, 100, InputEvent::A_LONG);
     advance(a, t, 100, InputEvent::A_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
@@ -157,11 +166,8 @@ void test_summary_a_starts_new_session(void) {
 
 void test_active_long_b_toggles_buzzer_persistently(void) {
     App a;
-    a.begin(false);
     uint32_t t = 0;
-    advance(a, t, 2100);
-    advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT);
+    reach_active(a, t);
     TEST_ASSERT_FALSE(a.buzzer_on());
     advance(a, t, 100, InputEvent::B_LONG);
     TEST_ASSERT_TRUE(a.buzzer_on());

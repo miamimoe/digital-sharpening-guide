@@ -144,18 +144,11 @@ void App::handle_set_target(const Tick& t) {
                 last_activity_ms_ = t.now_ms;
             } else {
                 target_deg_ = preset_degrees(preset_selection_);
-                // Synthesize a g_ref consistent with the chosen angle.
-                float r = target_deg_ * (float)M_PI / 180.0f;
-                g_ref_ = {std::cos(r), 0.0f, -std::sin(r)};
                 transition(State::SET_TOLERANCE, t.now_ms);
             }
         } else {
-            // Live capture from filter.
-            g_ref_ = filter_.gravity();
-            float sinv = -g_ref_.z;
-            if (sinv >  1.0f) sinv =  1.0f;
-            if (sinv < -1.0f) sinv = -1.0f;
-            target_deg_ = std::asin(sinv) * (180.0f / (float)M_PI);
+            // Freehand path removed (world-horizontal assumption gone).
+            // target_deg_ keeps its current value (default 17.0f or last preset).
             transition(State::SET_TOLERANCE, t.now_ms);
         }
     } else if (t.input == InputEvent::B_SHORT) {
@@ -175,7 +168,10 @@ void App::handle_set_tolerance(const Tick& t) {
         last_activity_ms_ = t.now_ms;
     } else if (t.input == InputEvent::A_SHORT) {
         settings::save_tolerance(tol_);
-        transition(State::ACTIVE, t.now_ms);
+        // confirm tolerance, persist, advance into ZERO_CAL.
+        zc_substate_        = ZeroCalSubstate::PROMPT_A;
+        zc_capture_running_ = false;
+        transition(State::ZERO_CAL, t.now_ms);
     }
 }
 
