@@ -97,6 +97,12 @@ void test_classify_zero_direction_falls_back_to_green(void) {
     TEST_ASSERT_EQUAL(ColorState::GREEN, c);
 }
 
+void test_classify_below_tolerance_positive_sign_returns_red(void) {
+    // Below target but direction_sign > 0 -> RED (sign drives color when out of tol).
+    ColorState c = classify(15.0f, 17.0f, 1.0f, +1);
+    TEST_ASSERT_EQUAL(ColorState::RED, c);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_zero_deviation_is_zero_degrees);
@@ -112,5 +118,6 @@ int main(int, char**) {
     RUN_TEST(test_classify_above_tolerance_returns_red);
     RUN_TEST(test_classify_below_tolerance_returns_blue);
     RUN_TEST(test_classify_zero_direction_falls_back_to_green);
+    RUN_TEST(test_classify_below_tolerance_positive_sign_returns_red);
     return UNITY_END();
 }
