@@ -131,9 +131,70 @@ void App::handle_bias_cal(const Tick& t) {
     }
 }
 
-// STUB: Task 8 will implement the full ZERO_CAL handler.
-void App::handle_zero_cal(const Tick& /*t*/) {
-    // placeholder — Task 8 fills this in
+void App::handle_zero_cal(const Tick& t) {
+    InputEvent input = t.input;
+
+    // Long-press A aborts back to SET_TARGET (consistent with other screens).
+    if (input == InputEvent::A_LONG) {
+        zc_capture_running_ = false;
+        transition(State::SET_TARGET, t.now_ms);
+        return;
+    }
+
+    auto on_capture_done = [&](Vec3& dest, ZeroCalSubstate next) {
+        dest                = zc_fsm_.result();
+        zc_capture_running_ = false;
+        zc_substate_        = next;
+    };
+
+    switch (zc_substate_) {
+        case ZeroCalSubstate::PROMPT_A:
+            if (input == InputEvent::A_SHORT) {
+                zc_fsm_.start();
+                zc_capture_running_ = true;
+                zc_substate_        = ZeroCalSubstate::CAPTURE_A;
+            }
+            break;
+
+        case ZeroCalSubstate::CAPTURE_A:
+            zc_fsm_.update(t.accel_g, t.gyro_dps);
+            if (zc_fsm_.done()) {
+                on_capture_done(g_zero_A_, ZeroCalSubstate::PROMPT_B);
+            }
+            break;
+
+        case ZeroCalSubstate::PROMPT_B:
+            if (input == InputEvent::A_SHORT) {
+                zc_fsm_.start();
+                zc_capture_running_ = true;
+                zc_substate_        = ZeroCalSubstate::CAPTURE_B;
+            }
+            break;
+
+        case ZeroCalSubstate::CAPTURE_B:
+            zc_fsm_.update(t.accel_g, t.gyro_dps);
+            if (zc_fsm_.done()) {
+                on_capture_done(g_zero_B_, ZeroCalSubstate::DONE);
+                // Persist immediately and enter ACTIVE.
+                SessionState ss;
+                ss.active             = true;
+                ss.target_deg         = target_deg_;
+                ss.tolerance          = tol_;
+                ss.g_zero_A           = g_zero_A_;
+                ss.g_zero_B           = g_zero_B_;
+                ss.strokes_A          = 0;
+                ss.strokes_B          = 0;
+                ss.current_side       = Side::A;
+                ss.session_started_ms = t.now_ms;
+                session::mark_active(ss);
+                transition(State::ACTIVE, t.now_ms);
+            }
+            break;
+
+        case ZeroCalSubstate::DONE:
+            // Should not be reached — DONE triggers the transition above.
+            break;
+    }
 }
 
 void App::handle_set_target(const Tick& t) {

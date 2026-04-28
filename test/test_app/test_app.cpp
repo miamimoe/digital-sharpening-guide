@@ -186,6 +186,58 @@ void test_imu_fault_at_boot_goes_to_fault(void) {
     TEST_ASSERT_EQUAL_INT((int)State::FAULT, (int)a.current());
 }
 
+void test_zero_cal_two_capture_flow_advances_to_active(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);   // pass through BOOT splash to SET_TARGET
+
+    // SET_TARGET A_SHORT -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
+
+    // SET_TOLERANCE A_SHORT -> ZERO_CAL (PROMPT_A)
+    advance(a, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_A, (int)a.zero_cal_substate());
+
+    // PROMPT_A: press A to start CAPTURE_A.
+    Vec3 still_a = {0.0f, 0.0f, -1.0f};
+    Vec3 still_g = {0.0f, 0.0f,  0.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, still_a, still_g);
+
+    // 150 still ticks (1500ms = 500ms warmup + 1000ms averaging) -> PROMPT_B
+    advance(a, t, 1600, InputEvent::NONE, still_a, still_g);
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_B, (int)a.zero_cal_substate());
+
+    // PROMPT_B: press A to start CAPTURE_B with side-B pose.
+    Vec3 still_b = {0.0f, 0.0f, +1.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, still_b, still_g);
+    advance(a, t, 1600, InputEvent::NONE, still_b, still_g);
+
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    Vec3 za = a.g_zero_a();
+    Vec3 zb = a.g_zero_b();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, za.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, za.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, za.z);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, zb.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, zb.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, +1.0f, zb.z);
+}
+
+void test_zero_cal_long_a_aborts_to_set_target(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TARGET -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);  // SET_TOLERANCE -> ZERO_CAL
+    advance(a, t, 100, InputEvent::A_LONG);   // long-A aborts
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_without_session_goes_to_set_target);
@@ -201,5 +253,7 @@ int main(int, char**) {
     RUN_TEST(test_summary_a_starts_new_session);
     RUN_TEST(test_active_long_b_toggles_buzzer_persistently);
     RUN_TEST(test_imu_fault_at_boot_goes_to_fault);
+    RUN_TEST(test_zero_cal_two_capture_flow_advances_to_active);
+    RUN_TEST(test_zero_cal_long_a_aborts_to_set_target);
     return UNITY_END();
 }
