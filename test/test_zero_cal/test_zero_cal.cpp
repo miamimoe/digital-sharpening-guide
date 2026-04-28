@@ -22,10 +22,26 @@ void test_off_gravity_magnitude_fails_gate(void) {
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
 }
 
+void test_below_gravity_magnitude_fails_gate(void) {
+    Vec3 accel = {0.0f, 0.0f, -0.94f};  // |a| = 0.94g, deviation 0.06g > 0.01g
+    Vec3 gyro  = {0.0f, 0.0f,  0.0f};
+    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
+}
+
+void test_zero_accel_vector_fails_gate(void) {
+    // Zero-magnitude accel (e.g. IMU not yet producing samples) deviates 1g
+    // from gravity — well outside the 0.01g threshold — so it correctly fails.
+    Vec3 accel = {0.0f, 0.0f, 0.0f};
+    Vec3 gyro  = {0.0f, 0.0f, 0.0f};
+    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_still_sample_passes_gate);
     RUN_TEST(test_high_gyro_fails_gate);
     RUN_TEST(test_off_gravity_magnitude_fails_gate);
+    RUN_TEST(test_below_gravity_magnitude_fails_gate);
+    RUN_TEST(test_zero_accel_vector_fails_gate);
     return UNITY_END();
 }
