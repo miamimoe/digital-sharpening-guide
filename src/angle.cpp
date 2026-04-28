@@ -44,11 +44,14 @@ AngleResult compute_angle(Vec3 g_ref, Vec3 g_now) {
     return {theta_deg, sign};
 }
 
-ColorState classify(AngleResult r, float tolerance_deg) {
-    if (r.degrees <= tolerance_deg) return ColorState::GREEN;
-    // Direction ambiguous (exactly-on-the-fence input): be conservative and stay GREEN
-    // rather than flashing a misleading RED/BLUE correction direction.
-    if (r.direction_sign == 0)      return ColorState::GREEN;
-    if (r.direction_sign > 0)       return ColorState::RED;
+ColorState classify(float magnitude_deg,
+                    float target_deg,
+                    float tolerance_deg,
+                    int   direction_sign) {
+    float low  = target_deg - tolerance_deg;
+    float high = target_deg + tolerance_deg;
+    if (magnitude_deg >= low && magnitude_deg <= high) return ColorState::GREEN;
+    if (direction_sign == 0)                            return ColorState::GREEN;
+    if (direction_sign > 0)                             return ColorState::RED;
     return ColorState::BLUE;
 }

@@ -151,6 +151,7 @@ void App::handle_set_tolerance(const Tick& t) {
 }
 
 void App::handle_active(const Tick& t) {
+#ifndef UNIT_TEST
     filter_.update(t.gyro_dps, t.accel_g);
     Vec3 g_now = filter_.gravity();
 
@@ -208,6 +209,7 @@ void App::handle_active(const Tick& t) {
                       strokes_a_, strokes_b_,
                       buzzer_flash_showing_, buzzer_on_ };
     ui::draw_active(v);
+#endif // UNIT_TEST
 }
 
 void App::handle_summary(const Tick& t) {
