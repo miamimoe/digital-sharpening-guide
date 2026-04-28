@@ -12,11 +12,20 @@ enum class State : uint8_t {
     BIAS_CAL,
     SET_TARGET,
     SET_TOLERANCE,
+    ZERO_CAL,                  // NEW
     ACTIVE,
     SUMMARY,
     FAULT,
     RESUME_PROMPT,
     SLEEP
+};
+
+enum class ZeroCalSubstate : uint8_t {
+    PROMPT_A,
+    CAPTURE_A,
+    PROMPT_B,
+    CAPTURE_B,
+    DONE
 };
 
 enum class Side : uint8_t { A, B };
