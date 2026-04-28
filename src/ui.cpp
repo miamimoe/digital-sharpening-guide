@@ -13,6 +13,10 @@ namespace {
     ui::ActiveView s_last{};
     bool           s_last_valid = false;
 
+    // Throttle ZERO_CAL countdown to ~10 Hz (only repaint when tenths digit changes).
+    int  s_last_zc_tenths       = -1;
+    bool s_last_zc_tenths_valid = false;
+
     uint16_t color_for(ColorState c) {
         switch (c) {
             case ColorState::GREEN: return COL_GREEN;
@@ -199,6 +203,7 @@ void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b,
 }
 
 void draw_zero_cal_prompt(int step, bool retry) {
+    s_last_zc_tenths_valid = false;
     auto& d = M5.Display;
     d.fillScreen(COL_BLACK);
     d.setTextColor(COL_WHITE, COL_BLACK);
@@ -225,6 +230,11 @@ void draw_zero_cal_prompt(int step, bool retry) {
 }
 
 void draw_zero_cal_progress(int remaining_ms) {
+    int tenths = remaining_ms / 100;  // 0..15 for 0..1500 ms
+    if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths) return;
+    s_last_zc_tenths       = tenths;
+    s_last_zc_tenths_valid = true;
+
     auto& d = M5.Display;
     d.fillScreen(COL_BLACK);
     d.setTextColor(COL_WHITE, COL_BLACK);
@@ -233,7 +243,7 @@ void draw_zero_cal_progress(int remaining_ms) {
     d.print("Hold still");
     d.setTextSize(4);
     d.setCursor(8, 120);
-    d.printf("%d.%ds", remaining_ms / 1000, (remaining_ms % 1000) / 100);
+    d.printf("%d.%ds", tenths / 10, tenths % 10);
 }
 
 void set_backlight(uint8_t percent) {
