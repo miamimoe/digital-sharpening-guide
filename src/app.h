@@ -3,6 +3,7 @@
 #include "stroke.h"
 #include "side.h"
 #include "filter.h"
+#include "zero_cal.h"
 
 class App {
 public:
@@ -27,11 +28,15 @@ public:
     Side      current_side()     const { return side_fsm_.current_side(); }
     uint32_t  last_activity_ms() const { return last_activity_ms_; }
     uint32_t  last_stroke_ms()   const { return last_stroke_ms_; }
+    ZeroCalSubstate  zero_cal_substate() const { return zc_substate_; }
+    Vec3             g_zero_a()          const { return g_zero_A_; }
+    Vec3             g_zero_b()          const { return g_zero_B_; }
 
 private:
     void transition(State to, uint32_t now_ms);
     void handle_boot            (const Tick& t);
     void handle_bias_cal        (const Tick& t);
+    void handle_zero_cal        (const Tick& t);
     void handle_set_target      (const Tick& t);
     void handle_set_tolerance   (const Tick& t);
     void handle_active          (const Tick& t);
@@ -46,7 +51,15 @@ private:
     float            target_deg_           = 17.0f;
     Tolerance        tol_                  = Tolerance::NORMAL;
     bool             buzzer_on_            = false;
-    Vec3             g_ref_                = {0.0f, 0.0f, -1.0f};
+    Vec3             g_ref_                = {0.0f, 0.0f, -1.0f}; // TEMP (Task 7/9 will remove): legacy field for the not-yet-rewired handlers
+    Vec3             g_zero_A_             = {0.0f, 0.0f, 0.0f};
+    Vec3             g_zero_B_             = {0.0f, 0.0f, 0.0f};
+
+    // ZERO_CAL substate machinery
+    ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_A;
+    bool             zc_capture_running_   = false;
+    zero_cal::CaptureFSM zc_fsm_;
+
     uint32_t         strokes_a_            = 0;
     uint32_t         strokes_b_            = 0;
     uint32_t         session_started_ms_   = 0;

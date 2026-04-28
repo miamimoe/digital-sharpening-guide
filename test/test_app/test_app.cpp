@@ -35,13 +35,15 @@ void test_boot_without_session_goes_to_set_target(void) {
 void test_boot_with_session_goes_to_resume_prompt(void) {
     App a;
     // mark session active via session::mark_active so session::has_session() returns true
+    // Supply non-zero g_zero_A/B so the defensive guard does not redirect to ZERO_CAL.
     SessionState s;
     s.target_deg = 17.0f;
-    s.tolerance = Tolerance::NORMAL;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
     session::mark_active(s);
     a.begin(true);
-    uint32_t t = 0;
-    advance(a, t, 2100);
+    // begin(true) skips BOOT and lands directly in RESUME_PROMPT — no boot wait needed.
     TEST_ASSERT_EQUAL_INT((int)State::RESUME_PROMPT, (int)a.current());
 }
 
@@ -49,11 +51,12 @@ void test_resume_prompt_a_confirms_active(void) {
     App a;
     SessionState s;
     s.target_deg = 17.0f;
-    s.tolerance = Tolerance::NORMAL;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
     session::mark_active(s);
     a.begin(true);
     uint32_t t = 0;
-    advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
 }
@@ -62,11 +65,12 @@ void test_resume_prompt_b_starts_new_session(void) {
     App a;
     SessionState s;
     s.target_deg = 17.0f;
-    s.tolerance = Tolerance::NORMAL;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
     session::mark_active(s);
     a.begin(true);
     uint32_t t = 0;
-    advance(a, t, 2100);
     advance(a, t, 100, InputEvent::B_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
 }
@@ -75,11 +79,12 @@ void test_resume_prompt_times_out_to_set_target(void) {
     App a;
     SessionState s;
     s.target_deg = 17.0f;
-    s.tolerance = Tolerance::NORMAL;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
     session::mark_active(s);
     a.begin(true);
     uint32_t t = 0;
-    advance(a, t, 2100);
     advance(a, t, 5500);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
 }

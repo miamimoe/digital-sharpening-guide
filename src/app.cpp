@@ -6,6 +6,10 @@
 #include "session.h"
 #include <cmath>
 
+static inline bool is_zero_vec(Vec3 v) {
+    return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f;
+}
+
 static PresetSelection next_preset(PresetSelection p) {
     switch (p) {
         case PresetSelection::P12:    return PresetSelection::P15;
@@ -33,15 +37,24 @@ void App::begin(bool had_session_in_rtc_ram) {
     buzzer_on_ = settings::load_buzzer();
     tol_       = settings::load_tolerance();
 
-    if (had_session_in_rtc_ram) {
+    if (had_session_in_rtc_ram && session::has_session()) {
         const auto& s = session::state();
         target_deg_         = s.target_deg;
         tol_                = s.tolerance;
-        g_ref_              = s.g_ref;
+        g_zero_A_           = s.g_zero_A;
+        g_zero_B_           = s.g_zero_B;
         strokes_a_          = s.strokes_A;
         strokes_b_          = s.strokes_B;
         session_started_ms_ = s.session_started_ms;
         side_fsm_.restore_side(s.current_side);
+        if (is_zero_vec(g_zero_A_) || is_zero_vec(g_zero_B_)) {
+            transition(State::ZERO_CAL, 0);
+            zc_substate_ = is_zero_vec(g_zero_A_) ? ZeroCalSubstate::PROMPT_A
+                                                  : ZeroCalSubstate::PROMPT_B;
+            return;
+        }
+        transition(State::RESUME_PROMPT, 0);
+        return;
     }
     transition(State::BOOT, 0);
 }
@@ -60,6 +73,7 @@ void App::transition(State to, uint32_t now_ms) {
             preset_selection_ = PresetSelection::P12;
             break;
         case State::SET_TOLERANCE: break;
+        case State::ZERO_CAL:      break;
         case State::ACTIVE: {
             stroke_fsm_.reset();
             side_fsm_.reset();
@@ -67,7 +81,8 @@ void App::transition(State to, uint32_t now_ms) {
             SessionState ss;
             ss.target_deg = target_deg_;
             ss.tolerance  = tol_;
-            ss.g_ref      = g_ref_;
+            ss.g_zero_A   = g_zero_A_;
+            ss.g_zero_B   = g_zero_B_;
             ss.strokes_A  = strokes_a_;
             ss.strokes_B  = strokes_b_;
             ss.current_side = side_fsm_.current_side();
@@ -105,6 +120,11 @@ void App::handle_bias_cal(const Tick& t) {
         settings::clear_first_boot();
         transition(State::SET_TARGET, t.now_ms);
     }
+}
+
+// STUB: Task 8 will implement the full ZERO_CAL handler.
+void App::handle_zero_cal(const Tick& /*t*/) {
+    // placeholder — Task 8 fills this in
 }
 
 void App::handle_set_target(const Tick& t) {
@@ -251,6 +271,7 @@ void App::on_tick(const Tick& t) {
     switch (state_) {
         case State::BOOT:          handle_boot(t); break;
         case State::BIAS_CAL:      handle_bias_cal(t); break;
+        case State::ZERO_CAL:      handle_zero_cal(t); break;
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
         case State::ACTIVE:        handle_active(t); break;
