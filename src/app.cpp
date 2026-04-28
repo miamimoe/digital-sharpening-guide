@@ -151,12 +151,13 @@ void App::handle_set_tolerance(const Tick& t) {
 }
 
 void App::handle_active(const Tick& t) {
-#ifndef UNIT_TEST
     filter_.update(t.gyro_dps, t.accel_g);
     Vec3 g_now = filter_.gravity();
 
     AngleResult ar = compute_angle(g_ref_, g_now);
-    ColorState  col = classify(ar, tolerance_degrees(tol_));
+    // TEMP (Task 9 will fix): target_deg passed as 0.0f because g_ref_ is still
+    // synthesized at the target angle, so ar.degrees is deviation from target.
+    ColorState  col = classify(ar.degrees, 0.0f, tolerance_degrees(tol_), ar.direction_sign);
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -209,7 +210,6 @@ void App::handle_active(const Tick& t) {
                       strokes_a_, strokes_b_,
                       buzzer_flash_showing_, buzzer_on_ };
     ui::draw_active(v);
-#endif // UNIT_TEST
 }
 
 void App::handle_summary(const Tick& t) {
