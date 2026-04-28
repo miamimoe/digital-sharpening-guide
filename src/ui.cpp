@@ -84,7 +84,7 @@ void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection 
     }
     M5.Display.setTextSize(1);
     M5.Display.setCursor(5, 200);
-    M5.Display.print(in_preset_mode ? "A:Pick  B:Next" : "A:Capture  B:Presets");
+    M5.Display.print(in_preset_mode ? "A:Pick  B:Next" : "A:Confirm  B:Presets");
 }
 
 void draw_set_tolerance(Tolerance tol) {

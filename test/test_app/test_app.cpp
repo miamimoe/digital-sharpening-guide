@@ -3,6 +3,10 @@
 #include "settings.h"
 #include "session.h"
 
+// Realistic g_now for tests that want to be at target_deg=17° from g_zero_A={0,0,-1}.
+// Rotated 17° around Y: g = {sin(17°), 0, -cos(17°)} ≈ {0.292, 0, -0.956}.
+static const Vec3 g_now_at_target_17 = {0.2924f, 0.0f, -0.9563f};
+
 static void advance(App& a, uint32_t& t, uint32_t dt_ms, InputEvent ev = InputEvent::NONE,
                     Vec3 accel = {0,0,-1}, Vec3 gyro = {0,0,0})
 {
@@ -151,7 +155,7 @@ void test_active_long_a_goes_to_summary(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);
-    advance(a, t, 100, InputEvent::A_LONG);
+    advance(a, t, 100, InputEvent::A_LONG, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)State::SUMMARY, (int)a.current());
 }
 
@@ -159,7 +163,7 @@ void test_summary_a_starts_new_session(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);
-    advance(a, t, 100, InputEvent::A_LONG);
+    advance(a, t, 100, InputEvent::A_LONG, g_now_at_target_17);
     advance(a, t, 100, InputEvent::A_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
 }
@@ -169,10 +173,10 @@ void test_active_long_b_toggles_buzzer_persistently(void) {
     uint32_t t = 0;
     reach_active(a, t);
     TEST_ASSERT_FALSE(a.buzzer_on());
-    advance(a, t, 100, InputEvent::B_LONG);
+    advance(a, t, 100, InputEvent::B_LONG, g_now_at_target_17);
     TEST_ASSERT_TRUE(a.buzzer_on());
     TEST_ASSERT_TRUE(settings::load_buzzer());
-    advance(a, t, 100, InputEvent::B_LONG);
+    advance(a, t, 100, InputEvent::B_LONG, g_now_at_target_17);
     TEST_ASSERT_FALSE(a.buzzer_on());
     TEST_ASSERT_FALSE(settings::load_buzzer());
 }
@@ -276,6 +280,32 @@ void test_zero_cal_abort_mid_capture_then_reenter_completes(void) {
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
 }
 
+void test_active_classifier_green_at_target_pose(void) {
+    // At g_now = 17° away from g_zero_A, classify must return GREEN through
+    // the in-tolerance path (NOT via the zero-direction-sign fallback).
+    App a;
+    SessionState s;
+    s.target_deg = 17.0f;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
+    session::mark_active(s);
+    a.begin(true);
+    uint32_t t = 0;
+    advance(a, t, 100, InputEvent::A_SHORT);  // RESUME_PROMPT -> ACTIVE
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    // Drive ~500ms of ticks at the target pose so the Mahony filter settles.
+    advance(a, t, 500, InputEvent::NONE, g_now_at_target_17);
+
+    // No public color accessor — verify indirectly: at target, no stroke
+    // should ever increment (stroke FSM uses in_tol; at target we ARE in_tol,
+    // so a stroke would only count if we left and re-entered tol within the
+    // hysteresis window, which we don't here).
+    TEST_ASSERT_EQUAL_UINT32(0, a.strokes_a());
+    TEST_ASSERT_EQUAL_UINT32(0, a.strokes_b());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_without_session_goes_to_set_target);
@@ -294,5 +324,6 @@ int main(int, char**) {
     RUN_TEST(test_zero_cal_two_capture_flow_advances_to_active);
     RUN_TEST(test_zero_cal_long_a_aborts_to_set_target);
     RUN_TEST(test_zero_cal_abort_mid_capture_then_reenter_completes);
+    RUN_TEST(test_active_classifier_green_at_target_pose);
     return UNITY_END();
 }

@@ -56,7 +56,6 @@ private:
 
     // ZERO_CAL substate machinery
     ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_A;
-    bool             zc_capture_running_   = false;
     zero_cal::CaptureFSM zc_fsm_;
 
     uint32_t         strokes_a_            = 0;

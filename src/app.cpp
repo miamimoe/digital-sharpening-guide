@@ -6,11 +6,7 @@
 #include "session.h"
 #include <cmath>
 
-// Tests Vec3 against exact zero. Safe given g_zero_A_/B_ are only ever
-// {0,0,0} (default-init) or normalized non-zero results from CaptureFSM —
-// CaptureFSM::result() cannot produce NaN because accum_count_ is always
-// >= 1 when DONE is reached (incremented every AVERAGING tick, AVERAGING_TICKS
-// >= 1 by construction).
+// Only ever {0,0,0} (default) or a normalized result from CaptureFSM.
 static inline bool is_zero_vec(Vec3 v) {
     return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f;
 }
@@ -136,23 +132,20 @@ void App::handle_zero_cal(const Tick& t) {
 
     // Long-press A aborts back to SET_TARGET (consistent with other screens).
     if (input == InputEvent::A_LONG) {
-        zc_capture_running_ = false;
         transition(State::SET_TARGET, t.now_ms);
         return;
     }
 
     auto on_capture_done = [&](Vec3& dest, ZeroCalSubstate next) {
-        dest                = zc_fsm_.result();
-        zc_capture_running_ = false;
-        zc_substate_        = next;
+        dest         = zc_fsm_.result();
+        zc_substate_ = next;
     };
 
     switch (zc_substate_) {
         case ZeroCalSubstate::PROMPT_A:
             if (input == InputEvent::A_SHORT) {
                 zc_fsm_.start();
-                zc_capture_running_ = true;
-                zc_substate_        = ZeroCalSubstate::CAPTURE_A;
+                zc_substate_ = ZeroCalSubstate::CAPTURE_A;
             }
             break;
 
@@ -166,8 +159,7 @@ void App::handle_zero_cal(const Tick& t) {
         case ZeroCalSubstate::PROMPT_B:
             if (input == InputEvent::A_SHORT) {
                 zc_fsm_.start();
-                zc_capture_running_ = true;
-                zc_substate_        = ZeroCalSubstate::CAPTURE_B;
+                zc_substate_ = ZeroCalSubstate::CAPTURE_B;
             }
             break;
 
@@ -220,8 +212,7 @@ void App::handle_set_tolerance(const Tick& t) {
     } else if (t.input == InputEvent::A_SHORT) {
         settings::save_tolerance(tol_);
         // confirm tolerance, persist, advance into ZERO_CAL.
-        zc_substate_        = ZeroCalSubstate::PROMPT_A;
-        zc_capture_running_ = false;
+        zc_substate_ = ZeroCalSubstate::PROMPT_A;
         transition(State::ZERO_CAL, t.now_ms);
     }
 }
