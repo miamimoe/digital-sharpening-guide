@@ -117,3 +117,16 @@ Run once, in order, when the M5StickC Plus Watch Kit arrives. Each step has an e
 Date hardware bring-up completed: ____________
 Any outstanding spec risk unresolved: ____________
 Amendments required to spec or code: ____________
+
+## Zero-Calibration Validation (added 2026-04-28)
+
+Run after the basic IMU/UI/buttons checks pass.
+
+1. **Repeatability** — capture 5 zeros in a row on the same physical pose without moving the device. Compare each captured `g_zero` against the first using `acos(dot)`. Expected: angular spread between any two captures is `< 0.5°`. If wider, the stillness gate is too loose for the bench environment — tighten thresholds in `src/zero_cal.h`.
+2. **Cross-side correctness** — mount the device on a real blade, lay flat on a stone for side A, capture; flip to side B, lay flat, capture. Tilt to roughly the target angle (use a protractor); confirm the displayed angle is within ±1° of the protractor reading on both sides. Repeat with a tilted stone (place a coin under one edge of the stone): displayed angle should still match the protractor.
+3. **Stillness-gate retry** — start CAPTURE_A, then tap the device gently mid-window. The FSM should drop back to WARMUP. The capture must not complete with bad data. (Note: v1 has no on-screen retry cue; the user only sees the countdown reset.)
+4. **Resume after sleep** — complete a full ZERO_CAL, enter ACTIVE, force sleep (long-press A then idle timeout), wake. Expected: skip ZERO_CAL, resume ACTIVE with the previously-captured zeros intact.
+5. **Battery-pull recovery** — power-cycle (battery pull) after a successful ZERO_CAL. Expected: RTC RAM clears, next boot routes through ZERO_CAL again.
+6. **Mahony singularity sanity** — during the flip from side A to side B, the device physically passes through intermediate orientations, so the Mahony filter sees non-zero cross-product errors and converges normally. This is documented as a synthetic-test concern only (E2E tests use 45° poses to avoid exact-antiparallel singularity), but worth verifying on real hardware: hold the device exactly antiparallel to its previous pose and confirm gravity readout converges within ~3 seconds. If it doesn't, the Mahony `kp` may need tuning, or a brief gyro-magnitude check could force a re-init on perfectly antiparallel transitions. Low priority — physical flips are unlikely to hit this in practice.
+
+If any step fails, capture serial logs (`pio device monitor -b 115200`) and update `Known risks` in `docs/superpowers/specs/2026-04-28-zero-calibration-design.md` with the observed failure mode before adjusting thresholds.
