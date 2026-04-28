@@ -6,6 +6,11 @@
 #include "session.h"
 #include <cmath>
 
+// Tests Vec3 against exact zero. Safe given g_zero_A_/B_ are only ever
+// {0,0,0} (default-init) or normalized non-zero results from CaptureFSM —
+// CaptureFSM::result() cannot produce NaN because accum_count_ is always
+// >= 1 when DONE is reached (incremented every AVERAGING tick, AVERAGING_TICKS
+// >= 1 by construction).
 static inline bool is_zero_vec(Vec3 v) {
     return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f;
 }
@@ -37,6 +42,10 @@ void App::begin(bool had_session_in_rtc_ram) {
     buzzer_on_ = settings::load_buzzer();
     tol_       = settings::load_tolerance();
 
+    // Wake-from-sleep path. RTC RAM only survives deep sleep (battery pull
+    // clears it), so a present session implies wake — skip BOOT splash and
+    // resume immediately. The defensive guard below routes incomplete sessions
+    // (missing g_zero_A or g_zero_B) into ZERO_CAL instead of RESUME_PROMPT.
     if (had_session_in_rtc_ram && session::has_session()) {
         const auto& s = session::state();
         target_deg_         = s.target_deg;
