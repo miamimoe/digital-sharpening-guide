@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <cmath>
 #include "app.h"
 #include "settings.h"
 #include "session.h"
@@ -18,6 +19,11 @@ static void advance(App& a, uint32_t& t, uint32_t dt_ms, InputEvent ev = InputEv
         emitted = true;
         a.on_tick(tick);
     }
+}
+
+// Run ~1.6s of still ticks to complete one ZERO_CAL capture (500ms warmup + 1000ms avg + slack).
+static void drive_still(App& a, uint32_t& t, Vec3 still_accel = {0.0f, 0.0f, -1.0f}) {
+    advance(a, t, 1600, InputEvent::NONE, still_accel, {0.0f, 0.0f, 0.0f});
 }
 
 void setUp(void) {
@@ -306,6 +312,120 @@ void test_active_classifier_green_at_target_pose(void) {
     TEST_ASSERT_EQUAL_UINT32(0, a.strokes_b());
 }
 
+void test_e2e_fresh_session_through_zero_cal_to_active(void) {
+    // BOOT (no session) -> SET_TARGET -> SET_TOLERANCE -> ZERO_CAL
+    //   -> capture A (flat, side A) -> capture B (flat, side B) -> ACTIVE
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
+
+    advance(a, t, 100, InputEvent::A_SHORT);  // -> SET_TOLERANCE
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
+
+    advance(a, t, 100, InputEvent::A_SHORT);  // -> ZERO_CAL (PROMPT_A)
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_A, (int)a.zero_cal_substate());
+
+    Vec3 pose_A = {0.0f, 0.0f, -1.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, pose_A);
+    drive_still(a, t, pose_A);
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_B, (int)a.zero_cal_substate());
+
+    Vec3 pose_B = {0.0f, 0.0f, +1.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, pose_B);
+    drive_still(a, t, pose_B);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    Vec3 za = a.g_zero_a();
+    Vec3 zb = a.g_zero_b();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, za.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, za.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, za.z);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, zb.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  0.0f, zb.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, +1.0f, zb.z);
+}
+
+void test_e2e_tilted_stone_target_angle_is_relative_to_g_zero(void) {
+    // The stone is tilted ~5° in world frame. The user's g_zero captures that
+    // tilt; sharpening at 17° from the captured zero should yield a 17° angle
+    // reading even though the world-frame angle is 22°.
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET confirm (default 17°)
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE confirm
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+
+    // "Stone tilted 5° around Y-axis": blade-flat gravity = {sin5, 0, -cos5}.
+    const float r5 = 5.0f * (float)M_PI / 180.0f;
+    Vec3 pose_A = { std::sin(r5), 0.0f, -std::cos(r5) };
+    Vec3 pose_B = {-std::sin(r5), 0.0f, +std::cos(r5) };  // flipped about edge axis
+
+    advance(a, t, 100, InputEvent::A_SHORT, pose_A);
+    drive_still(a, t, pose_A);
+    advance(a, t, 100, InputEvent::A_SHORT, pose_B);
+    drive_still(a, t, pose_B);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    // Tilt up to 17° from pose_A (rotation around Y by +17° from already-tilted-5°
+    // pose). World-frame angle from vertical is now 22°.
+    const float r22 = 22.0f * (float)M_PI / 180.0f;
+    Vec3 pose_at_target = { std::sin(r22), 0.0f, -std::cos(r22) };
+
+    // Verify the angle between captured g_zero_A and the tilted-up pose is ~17°.
+    Vec3 za = a.g_zero_a();
+    float dot = za.x*pose_at_target.x + za.y*pose_at_target.y + za.z*pose_at_target.z;
+    if (dot >  1.0f) dot =  1.0f;
+    if (dot < -1.0f) dot = -1.0f;
+    float angle_deg = std::acos(dot) * (180.0f / (float)M_PI);
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 17.0f, angle_deg);
+}
+
+void test_e2e_side_switch_uses_g_zero_b(void) {
+    // After ZERO_CAL, simulate a peel/settle that flips gravity polarity.
+    // The active reference should swap from g_zero_A to g_zero_B; the side FSM
+    // detects the flip via grav_dot_ref polarity vs g_zero_A_.
+    //
+    // Use 45°-tilted poses (not antiparallel) so the Mahony filter can converge
+    // during the settle window without hitting the cross-product zero singularity
+    // that antiparallel ({0,0,-1} / {0,0,+1}) vectors produce.
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE
+
+    // pose_A: 45° tilt around X (Y-dominant). pose_B: flipped about the edge axis.
+    Vec3 pose_A = {0.0f,  0.7071f, -0.7071f};
+    Vec3 pose_B = {0.0f, -0.7071f, +0.7071f};
+    advance(a, t, 100, InputEvent::A_SHORT, pose_A);
+    drive_still(a, t, pose_A);
+    advance(a, t, 100, InputEvent::A_SHORT, pose_B);
+    drive_still(a, t, pose_B);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
+
+    // Pre-converge the Mahony filter toward pose_B before the spike. The filter
+    // needs many ticks to converge because kp=0.5 at 100Hz produces small per-step
+    // corrections. While running at pose_B with accel_mag ≈ 1.0 (< SPIKE_DEVIATION_G),
+    // the SideFSM stays in STABLE — no premature switch.
+    advance(a, t, 5000, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
+
+    // Spike: magnitude 1.8g → deviation 0.8 > SPIKE_DEVIATION_G (0.5). Triggers FSM.
+    Vec3 spike = {0.0f, 1.8f, 0.0f};
+    // Settle at pose_B for 600ms. Filter is already converged to pose_B, so
+    // grav_dot_ref is reliably < 0 throughout the entire settle window.
+    advance(a, t,  50, InputEvent::NONE, spike, {0.0f, 0.0f, 0.0f});
+    advance(a, t, 600, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
+
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_without_session_goes_to_set_target);
@@ -325,5 +445,8 @@ int main(int, char**) {
     RUN_TEST(test_zero_cal_long_a_aborts_to_set_target);
     RUN_TEST(test_zero_cal_abort_mid_capture_then_reenter_completes);
     RUN_TEST(test_active_classifier_green_at_target_pose);
+    RUN_TEST(test_e2e_fresh_session_through_zero_cal_to_active);
+    RUN_TEST(test_e2e_tilted_stone_target_angle_is_relative_to_g_zero);
+    RUN_TEST(test_e2e_side_switch_uses_g_zero_b);
     return UNITY_END();
 }
