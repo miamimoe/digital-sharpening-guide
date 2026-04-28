@@ -5,15 +5,10 @@ namespace zero_cal {
 
 // Stillness thresholds (per spec 2026-04-28 §4):
 //   |‖a‖ − 1.0g| < 0.01g
-//   lateral energy (accel_sq − dominant_axis_sq) sqrt < 0.02g
 //   |gyro| < 0.5 dps
-// The lateral check catches motions that leave total magnitude near 1g but shift
-// the gravity vector sideways (e.g. 0.05g lateral shift moves magnitude only
-// ~0.00125g but moves the vector 2.9°). Full per-axis stddev windowing (spec §4
-// third bullet) is deferred to v2 — magnitude + lateral + gyro is sufficient for
-// realistic bench sharpening setups.
+// Per-axis stddev windowing (spec §4 third bullet) is deferred to v2 —
+// magnitude + gyro is sufficient for realistic bench sharpening setups.
 constexpr float STILL_ACCEL_MAG_TOL_G     = 0.01f;
-constexpr float STILL_ACCEL_LATERAL_G     = 0.02f;
 constexpr float STILL_GYRO_MAG_DPS        = 0.5f;
 
 bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps);

@@ -4,17 +4,8 @@
 namespace zero_cal {
 
 bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps) {
-    float ax = accel_g.x, ay = accel_g.y, az = accel_g.z;
-    float a_sq = ax*ax + ay*ay + az*az;
-    float a_mag = std::sqrt(a_sq);
+    float a_mag = std::sqrt(accel_g.x*accel_g.x + accel_g.y*accel_g.y + accel_g.z*accel_g.z);
     if (std::fabs(a_mag - 1.0f) >= STILL_ACCEL_MAG_TOL_G) return false;
-    // Lateral check: energy outside the dominant axis must be small.
-    // Catches motions that keep |a|≈1g but shift the gravity vector sideways.
-    float ax_sq = ax*ax, ay_sq = ay*ay, az_sq = az*az;
-    float dom = ax_sq > ay_sq ? (ax_sq > az_sq ? ax_sq : az_sq)
-                              : (ay_sq > az_sq ? ay_sq : az_sq);
-    float lateral_sq = a_sq - dom;
-    if (lateral_sq > STILL_ACCEL_LATERAL_G * STILL_ACCEL_LATERAL_G) return false;
     float g_mag = std::sqrt(gyro_dps.x*gyro_dps.x + gyro_dps.y*gyro_dps.y + gyro_dps.z*gyro_dps.z);
     if (g_mag >= STILL_GYRO_MAG_DPS) return false;
     return true;

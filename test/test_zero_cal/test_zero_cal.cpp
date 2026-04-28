@@ -38,7 +38,7 @@ void test_zero_accel_vector_fails_gate(void) {
 
 static Vec3 still_accel = {0.0f, 0.0f, -1.0f};
 static Vec3 still_gyro  = {0.0f, 0.0f,  0.0f};
-static Vec3 jitter_accel = {0.05f, 0.0f, -1.0f}; // ~0.05g lateral
+static Vec3 jitter_accel = {0.0f, 0.0f, -1.1f}; // |a| = 1.1g, deviation 0.1g > 0.01g threshold
 
 void test_capture_completes_after_warmup_and_averaging(void) {
     zero_cal::CaptureFSM fsm;
