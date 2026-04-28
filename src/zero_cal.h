@@ -24,7 +24,11 @@ public:
     void  update(Vec3 accel_g, Vec3 gyro_dps);
     bool  done()      const { return phase_ == Phase::DONE; }
     Phase phase()     const { return phase_; }
+    // Ticks left in WARMUP. Returns 0 in any other phase (including DONE/IDLE)
+    // — callers should consult phase() if they need to disambiguate "not in
+    // warmup yet" vs. "warmup finished".
     int   warmup_remaining()    const;
+    // Ticks left in AVERAGING. Same caveat as warmup_remaining().
     int   averaging_remaining() const;
     Vec3  result()    const;
 

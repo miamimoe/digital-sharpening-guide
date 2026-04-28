@@ -74,6 +74,16 @@ void test_jitter_during_averaging_restarts(void) {
     TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
 }
 
+void test_idle_update_is_noop(void) {
+    zero_cal::CaptureFSM fsm;
+    // Did NOT call start(); FSM is IDLE.
+    for (int i = 0; i < 200; ++i) {
+        fsm.update(still_accel, still_gyro);
+    }
+    TEST_ASSERT_FALSE(fsm.done());
+    TEST_ASSERT_EQUAL(zero_cal::Phase::IDLE, fsm.phase());
+}
+
 void test_reset_clears_state(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
@@ -95,5 +105,6 @@ int main(int, char**) {
     RUN_TEST(test_jitter_during_warmup_restarts);
     RUN_TEST(test_jitter_during_averaging_restarts);
     RUN_TEST(test_reset_clears_state);
+    RUN_TEST(test_idle_update_is_noop);
     return UNITY_END();
 }
