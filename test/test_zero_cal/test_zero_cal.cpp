@@ -36,6 +36,54 @@ void test_zero_accel_vector_fails_gate(void) {
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
 }
 
+static Vec3 still_accel = {0.0f, 0.0f, -1.0f};
+static Vec3 still_gyro  = {0.0f, 0.0f,  0.0f};
+static Vec3 jitter_accel = {0.05f, 0.0f, -1.0f}; // ~0.05g lateral
+
+void test_capture_completes_after_warmup_and_averaging(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    // 500ms warmup at 100 Hz = 50 ticks; 1s averaging = 100 ticks.
+    for (int i = 0; i < 150; ++i) {
+        fsm.update(still_accel, still_gyro);
+    }
+    TEST_ASSERT_TRUE(fsm.done());
+    Vec3 result = fsm.result();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f,  0.0f, result.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f,  0.0f, result.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, result.z);
+}
+
+void test_jitter_during_warmup_restarts(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
+    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    TEST_ASSERT_FALSE(fsm.done());
+    TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
+}
+
+void test_jitter_during_averaging_restarts(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    for (int i = 0; i < 50; ++i) fsm.update(still_accel, still_gyro);
+    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
+    TEST_ASSERT_FALSE(fsm.done());
+    TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
+}
+
+void test_reset_clears_state(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    for (int i = 0; i < 150; ++i) fsm.update(still_accel, still_gyro);
+    TEST_ASSERT_TRUE(fsm.done());
+    fsm.start();
+    TEST_ASSERT_FALSE(fsm.done());
+    TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_still_sample_passes_gate);
@@ -43,5 +91,9 @@ int main(int, char**) {
     RUN_TEST(test_off_gravity_magnitude_fails_gate);
     RUN_TEST(test_below_gravity_magnitude_fails_gate);
     RUN_TEST(test_zero_accel_vector_fails_gate);
+    RUN_TEST(test_capture_completes_after_warmup_and_averaging);
+    RUN_TEST(test_jitter_during_warmup_restarts);
+    RUN_TEST(test_jitter_during_averaging_restarts);
+    RUN_TEST(test_reset_clears_state);
     return UNITY_END();
 }
