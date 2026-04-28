@@ -51,7 +51,6 @@ private:
     float            target_deg_           = 17.0f;
     Tolerance        tol_                  = Tolerance::NORMAL;
     bool             buzzer_on_            = false;
-    Vec3             g_ref_                = {0.0f, 0.0f, -1.0f}; // TEMP (Task 7/9 will remove): legacy field for the not-yet-rewired handlers
     Vec3             g_zero_A_             = {0.0f, 0.0f, 0.0f};
     Vec3             g_zero_B_             = {0.0f, 0.0f, 0.0f};
 

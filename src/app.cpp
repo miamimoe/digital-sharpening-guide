@@ -230,12 +230,9 @@ void App::handle_active(const Tick& t) {
     filter_.update(t.gyro_dps, t.accel_g);
     Vec3 g_now = filter_.gravity();
 
-    AngleResult ar = compute_angle(g_ref_, g_now);
-    // TEMP (Task 9 will fix): target_deg passed as 0.0f because g_ref_ is still
-    // synthesized at the target angle, so ar.degrees is deviation from target.
-    // Note: ar.degrees comes from acos() so it's always >= 0; the low boundary
-    // (-tol) is structurally unreachable at this call site.
-    ColorState  col = classify(ar.degrees, 0.0f, tolerance_degrees(tol_), ar.direction_sign);
+    Vec3 g_zero_active = (side_fsm_.current_side() == Side::A) ? g_zero_A_ : g_zero_B_;
+    AngleResult ar = compute_angle(g_zero_active, g_now);
+    ColorState  col = classify(ar.degrees, target_deg_, tolerance_degrees(tol_), ar.direction_sign);
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -247,7 +244,7 @@ void App::handle_active(const Tick& t) {
     }
 
     float accel_mag = std::sqrt(t.accel_g.x*t.accel_g.x + t.accel_g.y*t.accel_g.y + t.accel_g.z*t.accel_g.z);
-    float grav_dot_ref = g_now.x*g_ref_.x + g_now.y*g_ref_.y + g_now.z*g_ref_.z;
+    float grav_dot_ref = g_now.x*g_zero_A_.x + g_now.y*g_zero_A_.y + g_now.z*g_zero_A_.z;
     side_fsm_.update(t.now_ms, accel_mag, grav_dot_ref);
     if (side_fsm_.consume_switch()) {
         stroke_fsm_.reset();
