@@ -4,114 +4,94 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-static void drive(StrokeFSM& fsm, uint32_t& t, uint32_t dt_ms, bool in_tol) {
+// Drive the FSM for dt_ms at a fixed on-angle state and horizontal-accel level.
+static void drive(StrokeFSM& fsm, uint32_t& t, uint32_t dt_ms, bool in_tol, float lat) {
     uint32_t end = t + dt_ms;
-    while (t < end) {
-        t += 10;
-        fsm.update(t, in_tol);
+    while (t < end) { t += 10; fsm.update(t, in_tol, lat); }
+}
+
+void test_starts_at_zero(void) {
+    StrokeFSM fsm;
+    TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
+}
+
+void test_counts_one_pass(void) {
+    StrokeFSM fsm;
+    uint32_t t = 0;
+    drive(fsm, t, 400, true, 0.0f);    // on-angle, settled
+    drive(fsm, t, 100, true, 0.25f);   // one pass (accel peak)
+    drive(fsm, t, 100, true, 0.0f);    // settle
+    TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
+}
+
+void test_counts_multiple_continuous_passes(void) {
+    // The key case: continuous back-and-forth passes while staying on-angle.
+    StrokeFSM fsm;
+    uint32_t t = 0;
+    drive(fsm, t, 400, true, 0.0f);
+    for (int i = 0; i < 5; i++) {
+        drive(fsm, t, 80,  true, 0.25f);   // pass
+        drive(fsm, t, 320, true, 0.0f);    // settle between passes
     }
+    TEST_ASSERT_EQUAL_UINT32(5, fsm.stroke_count());
 }
 
-void test_starts_at_zero_count(void) {
-    StrokeFSM fsm;
-    TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
-}
-
-void test_canonical_single_stroke(void) {
+void test_close_peaks_merge_via_interval(void) {
+    // Two accel humps within MIN_INTERVAL_MS (one pass's accel + decel) count once.
     StrokeFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 200,  false);
-    drive(fsm, t, 600,  true);
-    drive(fsm, t, 300,  false);
+    drive(fsm, t, 400, true, 0.0f);
+    drive(fsm, t,  50, true, 0.25f);   // peak1 -> count 1 (~t=410)
+    drive(fsm, t, 100, true, 0.0f);    // brief dip (re-arm)
+    drive(fsm, t,  50, true, 0.25f);   // peak2 ~t=520, < 350ms since count -> ignored
     TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
 }
 
-void test_sub_threshold_in_blip_does_not_count(void) {
+void test_no_count_off_angle(void) {
     StrokeFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 200, false);
-    drive(fsm, t, 400, true);   // < IN_MIN_MS (500) -> not a stroke
-    drive(fsm, t, 300, false);
+    drive(fsm, t, 1000, false, 0.25f);   // never on-angle: motion ignored
     TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
 }
 
-void test_sub_200ms_out_wobble_does_not_end_stroke(void) {
+void test_sustained_high_without_dip_counts_once(void) {
     StrokeFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 600, true);
-    drive(fsm, t, 100, false);
-    drive(fsm, t, 200, true);
-    drive(fsm, t, 300, false);
+    drive(fsm, t, 400, true, 0.0f);
+    drive(fsm, t, 1000, true, 0.25f);    // stays high, never dips below re-arm
     TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
 }
 
-void test_three_back_to_back_strokes(void) {
+void test_grace_allows_brief_off_angle_mid_pass(void) {
     StrokeFSM fsm;
     uint32_t t = 0;
-    for (int i = 0; i < 3; i++) {
-        drive(fsm, t, 600, true);
-        drive(fsm, t, 300, false);
-    }
-    TEST_ASSERT_EQUAL_UINT32(3, fsm.stroke_count());
+    drive(fsm, t, 400, true,  0.0f);     // establish on-angle
+    drive(fsm, t,  50, true,  0.25f);    // pass 1 -> count 1 (~410)
+    drive(fsm, t, 100, true,  0.0f);     // settle (last on-angle ~550)
+    drive(fsm, t, 300, false, 0.0f);     // brief off-angle, still within grace
+    drive(fsm, t,  50, false, 0.25f);    // pass ~910 (>350 since count, within 600ms grace) -> count 2
+    TEST_ASSERT_EQUAL_UINT32(2, fsm.stroke_count());
 }
 
-void test_long_unbroken_in_counts_exactly_one_on_exit(void) {
+void test_reset_zeros(void) {
     StrokeFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 4000, true);
-    TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
-    drive(fsm, t, 300, false);
-    TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
-}
-
-void test_reset_zeros_count(void) {
-    StrokeFSM fsm;
-    uint32_t t = 0;
-    drive(fsm, t, 600, true);
-    drive(fsm, t, 300, false);
+    drive(fsm, t, 400, true, 0.0f);
+    drive(fsm, t,  80, true, 0.25f);
     TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
     fsm.reset();
     TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
 }
 
-void test_first_ever_update_at_zero_ms_still_counts_one_stroke(void) {
-    // Edge case: the old '== 0' sentinel could have collided with now_ms == 0
-    // on the first-ever call. Verify the canonical stroke still counts
-    // correctly when started from t = 0.
-    StrokeFSM fsm;
-    uint32_t t = 0;
-    // 600 ms in-tolerance starting at t=0 (>= IN_MIN_MS 500)
-    for (int i = 0; i < 60; i++) { t += 10; fsm.update(t, true); }
-    // 300 ms out-of-tolerance
-    for (int i = 0; i < 30; i++) { t += 10; fsm.update(t, false); }
-    TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
-}
-
-void test_timer_rollover_preserves_debounce_window(void) {
-    // Arrange: start the FSM near UINT32_MAX so the 300 ms window spans the
-    // rollover. Unsigned subtraction should still compute the correct elapsed.
-    StrokeFSM fsm;
-    uint32_t t = UINT32_MAX - 150; // 150 ms before rollover
-    // Drive false for 200 ms to establish OUT
-    for (int i = 0; i < 20; i++) { t += 10; fsm.update(t, false); }
-    // 600 ms true, straddling rollover (first 150 ms before wrap, 450 ms after)
-    for (int i = 0; i < 60; i++) { t += 10; fsm.update(t, true); }
-    TEST_ASSERT_TRUE(fsm.is_in_tolerance());
-    // Exit with 300 ms out to count the stroke
-    for (int i = 0; i < 30; i++) { t += 10; fsm.update(t, false); }
-    TEST_ASSERT_EQUAL_UINT32(1, fsm.stroke_count());
-}
-
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_starts_at_zero_count);
-    RUN_TEST(test_canonical_single_stroke);
-    RUN_TEST(test_sub_threshold_in_blip_does_not_count);
-    RUN_TEST(test_sub_200ms_out_wobble_does_not_end_stroke);
-    RUN_TEST(test_three_back_to_back_strokes);
-    RUN_TEST(test_long_unbroken_in_counts_exactly_one_on_exit);
-    RUN_TEST(test_reset_zeros_count);
-    RUN_TEST(test_first_ever_update_at_zero_ms_still_counts_one_stroke);
-    RUN_TEST(test_timer_rollover_preserves_debounce_window);
+    RUN_TEST(test_starts_at_zero);
+    RUN_TEST(test_counts_one_pass);
+    RUN_TEST(test_counts_multiple_continuous_passes);
+    RUN_TEST(test_close_peaks_merge_via_interval);
+    RUN_TEST(test_no_count_off_angle);
+    RUN_TEST(test_sustained_high_without_dip_counts_once);
+    RUN_TEST(test_grace_allows_brief_off_angle_mid_pass);
+    RUN_TEST(test_reset_zeros);
     return UNITY_END();
 }

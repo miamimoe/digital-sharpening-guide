@@ -337,9 +337,17 @@ void App::handle_active(const Tick& t) {
     float bevel = bevel_angle(g_flat_, edge_axis_, g_now);
     ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_));
 
+    // Horizontal linear acceleration = the stroke motion (gravity removed, then
+    // the component in the stone plane). g_now is a unit vector, so accel - g_now
+    // is the linear part in g; project out the vertical to isolate the sweep.
+    Vec3 la = { t.accel_g.x - g_now.x, t.accel_g.y - g_now.y, t.accel_g.z - g_now.z };
+    float la_v = la.x*g_now.x + la.y*g_now.y + la.z*g_now.z;
+    Vec3 la_h = { la.x - la_v*g_now.x, la.y - la_v*g_now.y, la.z - la_v*g_now.z };
+    float lat = std::sqrt(la_h.x*la_h.x + la_h.y*la_h.y + la_h.z*la_h.z);
+
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
-    stroke_fsm_.update(t.now_ms, in_tol);
+    stroke_fsm_.update(t.now_ms, in_tol, lat);
     if (stroke_fsm_.stroke_count() > before) {
         if (side_fsm_.current_side() == Side::A) strokes_a_++;
         else                                      strokes_b_++;

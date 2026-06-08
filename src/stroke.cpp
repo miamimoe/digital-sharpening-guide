@@ -1,37 +1,32 @@
 #include "stroke.h"
 
-void StrokeFSM::update(uint32_t now_ms, bool in_tolerance) {
-    if (in_tolerance == sustained_) {
-        // No contrary evidence — clear any pending attempt.
-        contrary_pending_   = false;
-        contrary_current_   = in_tolerance;
+void StrokeFSM::update(uint32_t now_ms, bool in_tolerance, float lat_accel_g) {
+    if (in_tolerance) {
+        have_in_tol_    = true;
+        last_in_tol_ms_ = now_ms;
+    }
+    // Only count while on-angle; a brief dip out of green mid-pass is tolerated.
+    bool on_angle = in_tolerance ||
+                    (have_in_tol_ && (now_ms - last_in_tol_ms_) < ON_ANGLE_GRACE_MS);
+    if (!on_angle) {
+        armed_ = false;
         return;
     }
 
-    // Contrary evidence this sample.
-    if (!contrary_pending_ || contrary_current_ != in_tolerance) {
-        contrary_pending_    = true;
-        contrary_started_ms_ = now_ms;
-        contrary_current_    = in_tolerance;
-    }
-
-    // Note on uint32_t rollover at ~49 days: the subtraction below wraps
-    // correctly by unsigned arithmetic rules, so the debounce window is
-    // preserved across millis() rollover.
-    uint32_t required = sustained_ ? OUT_MIN_MS : IN_MIN_MS;
-    if (now_ms - contrary_started_ms_ >= required) {
-        sustained_         = in_tolerance;
-        contrary_pending_  = false;
-        if (!sustained_) {
-            count_++;
-        }
+    if (lat_accel_g < PEAK_LOW_G) {
+        armed_ = true;                                   // settled between passes — re-arm
+    } else if (lat_accel_g >= PEAK_HIGH_G && armed_ &&
+               (now_ms - last_count_ms_) >= MIN_INTERVAL_MS) {
+        count_++;                                        // rising edge of a pass
+        armed_         = false;
+        last_count_ms_ = now_ms;
     }
 }
 
 void StrokeFSM::reset() {
-    sustained_           = false;
-    contrary_pending_    = false;
-    contrary_current_    = false;
-    contrary_started_ms_ = 0;
-    count_               = 0;
+    armed_          = true;
+    have_in_tol_    = false;
+    last_count_ms_  = 0;
+    last_in_tol_ms_ = 0;
+    count_          = 0;
 }

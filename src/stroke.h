@@ -1,24 +1,29 @@
 #pragma once
 #include <cstdint>
 
+// Counts sharpening passes from the back-and-forth MOTION while the blade is held
+// on-angle (green), rather than counting on-angle-then-off periods. A pass shows
+// up as a peak in horizontal linear acceleration (gravity removed); each peak,
+// rising-edge detected with hysteresis + a refractory interval, counts one stroke.
+//
+// Thresholds are hardware-tunable — calibrate against a hand-counted real session.
 class StrokeFSM {
 public:
-    // Sensitivity knob: how long the angle must be held in-tolerance before it
-    // counts as a real stroke. Raised from 300ms after hardware testing showed
-    // brief incidental passes through the green zone were over-counting. Bump
-    // higher to be stricter (fewer false counts), lower to catch faster strokes.
-    static constexpr uint32_t IN_MIN_MS  = 500;
-    static constexpr uint32_t OUT_MIN_MS = 200;
+    static constexpr float    PEAK_HIGH_G       = 0.18f;  // rising-edge level that counts a pass
+    static constexpr float    PEAK_LOW_G        = 0.10f;  // re-arm below this (hysteresis)
+    static constexpr uint32_t MIN_INTERVAL_MS   = 350;    // merge intra-pass humps; ~max 3 passes/s
+    static constexpr uint32_t ON_ANGLE_GRACE_MS = 600;    // tolerate a brief off-angle dip mid-pass
 
-    void      update(uint32_t now_ms, bool in_tolerance);
+    // lat_accel_g: horizontal linear-acceleration magnitude (|accel - gravity|,
+    // projected onto the plane perpendicular to gravity) — the stroke motion.
+    void      update(uint32_t now_ms, bool in_tolerance, float lat_accel_g);
     uint32_t  stroke_count() const { return count_; }
-    bool      is_in_tolerance() const { return sustained_; }
     void      reset();
 
 private:
-    bool     sustained_             = false;
-    bool     contrary_pending_      = false;  // explicit flag replacing "== 0" sentinel
-    bool     contrary_current_      = false;
-    uint32_t contrary_started_ms_   = 0;
-    uint32_t count_                 = 0;
+    bool     armed_          = true;
+    bool     have_in_tol_    = false;
+    uint32_t last_count_ms_  = 0;
+    uint32_t last_in_tol_ms_ = 0;
+    uint32_t count_          = 0;
 };
