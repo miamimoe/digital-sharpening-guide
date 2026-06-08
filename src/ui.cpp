@@ -112,7 +112,8 @@ void draw_set_tolerance(Tolerance tol) {
 }
 
 void draw_active(const ActiveView& v) {
-    if (!s_last_valid || s_last.color != v.color) {
+    bool color_changed = !s_last_valid || s_last.color != v.color;
+    if (color_changed) {
         M5.Display.fillScreen(color_for(v.color));
         // Legend strip.
         M5.Display.fillRect(5,  5, 14, 14, COL_BLUE);
@@ -126,12 +127,17 @@ void draw_active(const ActiveView& v) {
     }
 
     bool counts_changed =
-        !s_last_valid ||
         s_last.current_side != v.current_side ||
         s_last.strokes_A != v.strokes_A ||
         s_last.strokes_B != v.strokes_B;
-    if (counts_changed) {
-        M5.Display.fillRect(0, 90, 135, 100, color_for(v.color));
+    // The buzzer overlay sits over the count band; when it clears we must repaint
+    // the band (and the count area was also wiped by a color-change fillScreen).
+    bool flash_ended = s_last_valid && s_last.buzzer_flash && !v.buzzer_flash;
+    if (color_changed || counts_changed || flash_ended) {
+        // Cover the count band AND the buzzer overlay region (y=90..235) so the
+        // small count repaints cleanly (no transparent-text digit bleed) and any
+        // stale overlay is erased.
+        M5.Display.fillRect(0, 90, 135, 145, color_for(v.color));
         uint32_t big = (v.current_side == Side::A) ? v.strokes_A : v.strokes_B;
         uint32_t sm  = (v.current_side == Side::A) ? v.strokes_B : v.strokes_A;
         char other_label = (v.current_side == Side::A) ? 'B' : 'A';

@@ -2,7 +2,15 @@
 #include "types.h"
 #include <cstdint>
 
+// Bump SESSION_VERSION whenever the field layout below changes, so a firmware
+// update that leaves a stale struct in RTC RAM is detected and discarded instead
+// of read as garbage. magic/version MUST stay the first two fields.
+constexpr uint32_t SESSION_MAGIC   = 0x53475A31;  // "SGZ1"
+constexpr uint16_t SESSION_VERSION = 1;
+
 struct SessionState {
+    uint32_t  magic              = SESSION_MAGIC;
+    uint16_t  version            = SESSION_VERSION;
     bool      active             = false;
     float     target_deg         = 0.0f;
     Tolerance tolerance          = Tolerance::NORMAL;

@@ -1,7 +1,7 @@
 #include "side.h"
 #include <cmath>
 
-void SideFSM::update(uint32_t now_ms, float accel_mag_g, float grav_dot_ref) {
+void SideFSM::update(uint32_t now_ms, float accel_mag_g, float gyro_mag_dps, float grav_dot_ref) {
     float dev = std::fabs(accel_mag_g - 1.0f);
 
     if (phase_ == STABLE) {
@@ -26,7 +26,10 @@ void SideFSM::update(uint32_t now_ms, float accel_mag_g, float grav_dot_ref) {
         return;
     }
 
-    if (dev <= SETTLE_TOL_G) {
+    // A genuine settle needs both the accel magnitude back near 1g AND the gyro
+    // quiet — a slow handling rotation can momentarily read ~1g while the device
+    // is still turning, which must not be mistaken for "laid flat on the blade".
+    if (dev <= SETTLE_TOL_G && gyro_mag_dps < SETTLE_GYRO_DPS) {
         if (!settling_) {
             settling_          = true;
             settle_started_ms_ = now_ms;

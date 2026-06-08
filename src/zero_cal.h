@@ -13,8 +13,10 @@ constexpr float STILL_GYRO_MAG_DPS        = 0.5f;
 
 bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps);
 
-constexpr int WARMUP_TICKS    = 50;   // 500 ms at 100 Hz
-constexpr int AVERAGING_TICKS = 100;  // 1000 ms at 100 Hz
+// Derived from the real loop period (kLoopTickMs) so durations stay correct if
+// the loop rate ever changes: 500 ms warm-up, 1000 ms averaging (spec §4).
+constexpr int WARMUP_TICKS    = 500  / (int)kLoopTickMs;   // 25 ticks @ 50 Hz
+constexpr int AVERAGING_TICKS = 1000 / (int)kLoopTickMs;   // 50 ticks @ 50 Hz
 
 enum class Phase : uint8_t { IDLE, WARMUP, AVERAGING, DONE };
 

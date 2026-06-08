@@ -43,8 +43,8 @@ static Vec3 jitter_accel = {0.0f, 0.0f, -1.1f}; // |a| = 1.1g, deviation 0.1g > 
 void test_capture_completes_after_warmup_and_averaging(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    // 500ms warmup at 100 Hz = 50 ticks; 1s averaging = 100 ticks.
-    for (int i = 0; i < 150; ++i) {
+    // 500ms warmup at 50 Hz = 25 ticks; 1s averaging = 50 ticks (75 total).
+    for (int i = 0; i < 100; ++i) {
         fsm.update(still_accel, still_gyro);
     }
     TEST_ASSERT_TRUE(fsm.done());
@@ -57,9 +57,9 @@ void test_capture_completes_after_warmup_and_averaging(void) {
 void test_jitter_during_warmup_restarts(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    for (int i = 0; i < 15; ++i) fsm.update(still_accel, still_gyro);   // mid-warmup (<25)
     fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
-    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    for (int i = 0; i < 15; ++i) fsm.update(still_accel, still_gyro);
     TEST_ASSERT_FALSE(fsm.done());
     TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
 }
@@ -67,8 +67,8 @@ void test_jitter_during_warmup_restarts(void) {
 void test_jitter_during_averaging_restarts(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    for (int i = 0; i < 50; ++i) fsm.update(still_accel, still_gyro);
-    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);
+    for (int i = 0; i < 25; ++i) fsm.update(still_accel, still_gyro);   // complete warmup
+    for (int i = 0; i < 20; ++i) fsm.update(still_accel, still_gyro);   // mid-averaging (<50)
     fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
     TEST_ASSERT_FALSE(fsm.done());
     TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());

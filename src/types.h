@@ -1,6 +1,10 @@
 #pragma once
 #include <cstdint>
 
+// Main cooperative-loop period. Single source of truth for the loop rate (50 Hz);
+// modules that count ticks-as-duration (zero_cal, app countdowns) derive from it.
+constexpr uint32_t kLoopTickMs = 20;
+
 struct Vec3 {
     float x;
     float y;

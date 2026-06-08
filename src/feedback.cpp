@@ -25,6 +25,7 @@ void fault_led() {
 }
 
 void beep_out_of_tolerance() {
+    if (!M5.Speaker.isEnabled()) return;
     M5.Speaker.tone(BEEP_HZ, BEEP_MS);
 }
 

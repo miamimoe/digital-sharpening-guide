@@ -32,12 +32,18 @@ FaultCode begin() {
 }
 
 bool read(Vec3& accel_g, Vec3& gyro_dps) {
-    float ax, ay, az, gx, gy, gz;
-    if (!M5.Imu.getAccel(&ax, &ay, &az)) return false;
-    if (!M5.Imu.getGyro (&gx, &gy, &gz)) return false;
+    float ax = 0, ay = 0, az = 0, gx = 0, gy = 0, gz = 0;
+    // In M5Unified's default (non-FIFO) mode, getAccel/getGyro return false simply
+    // when no fresh sample is ready (MPU6886 data-ready bit clear) — a normal,
+    // frequent condition at 50 Hz, not an error. They still write the most recent
+    // cached sample into the outputs, so always capture it and report freshness
+    // via the return. Callers must treat false as "no new data this instant" and
+    // only escalate to a fault after a sustained run of failures.
+    bool a_ok = M5.Imu.getAccel(&ax, &ay, &az);
+    bool g_ok = M5.Imu.getGyro (&gx, &gy, &gz);
     accel_g  = {ax, ay, az};
     gyro_dps = {gx, gy, gz};
-    return true;
+    return a_ok && g_ok;
 }
 
 bool capture_gyro_bias(Vec3& bias_out_dps) {
@@ -58,7 +64,9 @@ bool capture_gyro_bias(Vec3& bias_out_dps) {
         if (now - last < TICK_MS) { delay(1); continue; }
         last = now;
         Vec3 a, g;
-        if (!read(a, g)) return false;
+        // No fresh sample this tick is benign; skip it. A truly dead IMU never
+        // produces fresh data and is caught by the MAX_DURATION_MS timeout above.
+        if (!read(a, g)) continue;
         float mag = sqrtf(a.x*a.x + a.y*a.y + a.z*a.z);
         if (fabsf(mag - 1.0f) > STILLNESS_G) {
             sx = sy = sz = 0;

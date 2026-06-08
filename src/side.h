@@ -6,11 +6,12 @@ class SideFSM {
 public:
     static constexpr float    SPIKE_DEVIATION_G     = 0.5f;
     static constexpr float    SETTLE_TOL_G          = 0.1f;
+    static constexpr float    SETTLE_GYRO_DPS       = 15.0f;  // settle also requires gyro below this
     static constexpr uint32_t SETTLE_REQUIRED_MS    = 500;
     static constexpr uint32_t POST_SPIKE_TIMEOUT_MS = 5000;
     static constexpr uint32_t SUPPRESS_MS           = 2000;
 
-    void  update(uint32_t now_ms, float accel_mag_g, float grav_dot_ref);
+    void  update(uint32_t now_ms, float accel_mag_g, float gyro_mag_dps, float grav_dot_ref);
     void  manual_toggle(uint32_t now_ms);
     bool  consume_switch();
     Side  current_side() const { return side_; }

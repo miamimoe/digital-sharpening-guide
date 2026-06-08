@@ -16,7 +16,11 @@ static App       g_app;
 static InputFSM  g_input;
 
 static uint32_t  g_next_tick_ms       = 0;
-static constexpr uint32_t TICK_PERIOD_MS = 20; // 50 Hz — ample for human motion (1-5 Hz)
+static constexpr uint32_t TICK_PERIOD_MS = kLoopTickMs; // 50 Hz — ample for human motion (1-5 Hz)
+// A single imu::read() returning false just means "no fresh IMU sample this tick"
+// (MPU6886 data-ready clear at 50 Hz) — not a fault. Only a sustained run of
+// failures (0.5 s) indicates a genuinely unresponsive IMU.
+static constexpr uint32_t IMU_FAULT_TICKS = 25;
 
 void setup() {
     auto cfg = M5.config();
@@ -77,12 +81,16 @@ void loop() {
     bool b_pressed = M5.BtnB.isPressed();
     InputEvent ev = g_input.update(now, a_pressed, b_pressed);
 
-    Vec3 accel, gyro;
+    // imu::read() always populates accel/gyro with the most recent (at most one
+    // tick stale) sample; its false return means "no fresh data this tick", which
+    // is benign and frequent. Only fault after IMU_FAULT_TICKS consecutive misses.
+    static uint32_t imu_read_fails = 0;
+    Vec3 accel = {0,0,-1}, gyro = {0,0,0};
     FaultCode fault = FaultCode::NONE;
     if (!imu::read(accel, gyro)) {
-        fault = FaultCode::E02_SELF_TEST_FAILED;
-        accel = {0,0,-1};
-        gyro  = {0,0,0};
+        if (++imu_read_fails >= IMU_FAULT_TICKS) fault = FaultCode::E02_SELF_TEST_FAILED;
+    } else {
+        imu_read_fails = 0;
     }
 
     App::Tick tick{now, ev, accel, gyro, fault};

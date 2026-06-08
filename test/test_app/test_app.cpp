@@ -85,6 +85,28 @@ void test_resume_prompt_a_confirms_active(void) {
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
 }
 
+void test_resume_preserves_restored_side(void) {
+    // A session that slept on side B must resume on side B (transition(ACTIVE)
+    // must not reset the side FSM on the resume path).
+    App a;
+    SessionState s;
+    s.target_deg = 17.0f;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_zero_A   = {0.0f, 0.0f, -1.0f};
+    s.g_zero_B   = {0.0f, 0.0f,  1.0f};
+    s.current_side = Side::B;
+    s.strokes_A  = 3;
+    s.strokes_B  = 5;
+    session::mark_active(s);
+    a.begin(true);
+    uint32_t t = 0;
+    advance(a, t, 100, InputEvent::A_SHORT);   // RESUME_PROMPT -> ACTIVE
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+    TEST_ASSERT_EQUAL_UINT32(3, a.strokes_a());
+    TEST_ASSERT_EQUAL_UINT32(5, a.strokes_b());
+}
+
 void test_resume_prompt_b_starts_new_session(void) {
     App a;
     SessionState s;
@@ -431,6 +453,7 @@ int main(int, char**) {
     RUN_TEST(test_boot_without_session_goes_to_set_target);
     RUN_TEST(test_boot_with_session_goes_to_resume_prompt);
     RUN_TEST(test_resume_prompt_a_confirms_active);
+    RUN_TEST(test_resume_preserves_restored_side);
     RUN_TEST(test_resume_prompt_b_starts_new_session);
     RUN_TEST(test_resume_prompt_times_out_to_set_target);
     RUN_TEST(test_set_target_a_captures_and_advances);

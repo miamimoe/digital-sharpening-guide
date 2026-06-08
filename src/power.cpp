@@ -12,6 +12,7 @@ IdleConfig config_for(State s) {
     switch (s) {
         case State::BOOT:
         case State::BIAS_CAL:
+        case State::ZERO_CAL:
         case State::FAULT:
         case State::RESUME_PROMPT:
         case State::SLEEP:
@@ -21,7 +22,7 @@ IdleConfig config_for(State s) {
         case State::ACTIVE:         return {180000, 300000}; // strokes-based
         case State::SUMMARY:        return { 60000,  90000};
     }
-    return {0, 0};
+    __builtin_unreachable();
 }
 
 void begin() {}
@@ -60,18 +61,13 @@ void update_backlight(uint32_t now_ms, State current,
 
 #ifndef UNIT_TEST
 [[noreturn]] void enter_deep_sleep() {
-    // Cut the display fully — Display::sleep() routes through the board HAL to
-    // disable both the backlight LED AND the ST7789's internal power. This is
-    // more reliable than setBrightness(0) which only PWMs to zero but leaves
-    // the AXP192 LDO3 supplying quiescent current.
-    M5.Display.sleep();
     M5.Display.setBrightness(0);
-
-    // Wake from power key: M5StickC Plus routes the AXP192 PEK through GPIO35.
-    const uint64_t WAKE_MASK = (1ULL << 35);
-    esp_sleep_enable_ext1_wakeup(WAKE_MASK, ESP_EXT1_WAKEUP_ALL_LOW);
-    esp_deep_sleep_start();
-    while (true) {}
+    // Use M5Unified's board-aware deep sleep: it calls Display.sleep() (cutting
+    // the backlight rail correctly for this board) and configures the power-key
+    // wake source (esp_sleep_enable_ext0_wakeup on GPIO35 for M5StickC Plus).
+    // Hand-rolling the EXT1 mask was both backlight- and wake-source-fragile.
+    M5.Power.deepSleep();
+    while (true) {}  // deepSleep() does not return
 }
 #else
 [[noreturn]] void enter_deep_sleep() {

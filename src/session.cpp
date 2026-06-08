@@ -18,7 +18,11 @@ RTC_DATA_ATTR static bool         g_state_valid = false;
 
 namespace session {
     void begin() {
-        if (!g_state_valid) {
+        // Reset if RTC RAM was never initialized (cold boot) OR holds a struct
+        // from a different firmware layout (magic/version mismatch after a flash).
+        if (!g_state_valid
+            || g_state.magic   != SESSION_MAGIC
+            || g_state.version != SESSION_VERSION) {
             g_state = SessionState{};
             g_state_valid = true;
         }

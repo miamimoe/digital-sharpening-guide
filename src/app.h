@@ -34,6 +34,7 @@ public:
 
 private:
     void transition(State to, uint32_t now_ms);
+    void save_session_();   // snapshot current ACTIVE session into RTC RAM
     void handle_boot            (const Tick& t);
     void handle_bias_cal        (const Tick& t);
     void handle_zero_cal        (const Tick& t);
@@ -56,7 +57,18 @@ private:
 
     // ZERO_CAL substate machinery
     ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_A;
+    // Which prompt substate is currently painted, so the (static) prompt screen
+    // is redrawn only on change instead of full-screen every 50 Hz tick.
+    ZeroCalSubstate  zc_rendered_          = ZeroCalSubstate::DONE;
     zero_cal::CaptureFSM zc_fsm_;
+
+    // Counts down ACTIVE ticks during which snap-to-raw recovery is suppressed
+    // after a snap fires (see handle_active).
+    uint8_t          snap_cooldown_        = 0;
+
+    // Last whole-second value rendered for a countdown screen (BIAS_CAL,
+    // RESUME_PROMPT) so they repaint once per second instead of every tick.
+    int              last_countdown_sec_   = -1;
 
     uint32_t         strokes_a_            = 0;
     uint32_t         strokes_b_            = 0;
