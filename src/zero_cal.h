@@ -3,13 +3,14 @@
 
 namespace zero_cal {
 
-// Stillness thresholds (per spec 2026-04-28 §4):
-//   |‖a‖ − 1.0g| < 0.01g
-//   |gyro| < 0.5 dps
-// Per-axis stddev windowing (spec §4 third bullet) is deferred to v2 —
-// magnitude + gyro is sufficient for realistic bench sharpening setups.
-constexpr float STILL_ACCEL_MAG_TOL_G     = 0.01f;
-constexpr float STILL_GYRO_MAG_DPS        = 0.5f;
+// Stillness thresholds. The spec's original 0.01g / 0.5 dps proved unachievable
+// on real MPU6886 hardware: a genuinely still device reads ~0.012g of accel
+// magnitude error (scale/offset) and up to ~2.7 dps of raw gyro (bias+noise),
+// so the warm-up never completed and the capture hung. Loosened to measured
+// at-rest noise with margin — still far tighter than a real sharpening motion
+// (>0.1g, tens of dps) so motion is still rejected. Bring-up tunable.
+constexpr float STILL_ACCEL_MAG_TOL_G     = 0.05f;
+constexpr float STILL_GYRO_MAG_DPS        = 8.0f;
 
 bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps);
 

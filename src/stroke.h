@@ -3,7 +3,11 @@
 
 class StrokeFSM {
 public:
-    static constexpr uint32_t IN_MIN_MS  = 300;
+    // Sensitivity knob: how long the angle must be held in-tolerance before it
+    // counts as a real stroke. Raised from 300ms after hardware testing showed
+    // brief incidental passes through the green zone were over-counting. Bump
+    // higher to be stricter (fewer false counts), lower to catch faster strokes.
+    static constexpr uint32_t IN_MIN_MS  = 500;
     static constexpr uint32_t OUT_MIN_MS = 200;
 
     void      update(uint32_t now_ms, bool in_tolerance);

@@ -9,6 +9,7 @@ namespace ui {
         uint32_t   strokes_B;
         bool       buzzer_flash;      // true = draw BUZZER ON/OFF overlay
         bool       buzzer_flash_on;
+        float      angle_deg;         // live sharpening angle (secondary readout)
     };
 
     void begin();

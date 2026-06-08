@@ -44,14 +44,10 @@ AngleResult compute_angle(Vec3 g_ref, Vec3 g_now) {
     return {theta_deg, sign};
 }
 
-ColorState classify(float magnitude_deg,
-                    float target_deg,
-                    float tolerance_deg,
-                    int   direction_sign) {
+ColorState classify(float magnitude_deg, float target_deg, float tolerance_deg) {
     float low  = target_deg - tolerance_deg;
     float high = target_deg + tolerance_deg;
-    if (magnitude_deg >= low && magnitude_deg <= high) return ColorState::GREEN;
-    if (direction_sign == 0)                            return ColorState::GREEN;
-    if (direction_sign > 0)                             return ColorState::RED;
-    return ColorState::BLUE;
+    if (magnitude_deg < low)  return ColorState::BLUE;   // below target: raise spine
+    if (magnitude_deg > high) return ColorState::RED;    // above target: lower spine
+    return ColorState::GREEN;
 }

@@ -203,9 +203,14 @@ void App::handle_zero_cal(const Tick& t) {
             break;
     }
 
-    int total_capture_ms_remaining =
-        zc_fsm_.warmup_remaining()    * (int)kLoopTickMs +
-        zc_fsm_.averaging_remaining() * (int)kLoopTickMs;
+    // Single smooth countdown across warmup+averaging. During warmup,
+    // averaging_remaining() is 0 but the whole averaging window is still ahead,
+    // so add it explicitly to avoid the timer jumping back up at phase change.
+    int ticks_remaining = zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining();
+    if (zc_fsm_.phase() == zero_cal::Phase::WARMUP) {
+        ticks_remaining += zero_cal::AVERAGING_TICKS;
+    }
+    int total_capture_ms_remaining = ticks_remaining * (int)kLoopTickMs;
 
     bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
 
@@ -287,7 +292,7 @@ void App::handle_active(const Tick& t) {
 
     Vec3 g_zero_active = (side_fsm_.current_side() == Side::A) ? g_zero_A_ : g_zero_B_;
     AngleResult ar = compute_angle(g_zero_active, g_now);
-    ColorState  col = classify(ar.degrees, target_deg_, tolerance_degrees(tol_), ar.direction_sign);
+    ColorState  col = classify(ar.degrees, target_deg_, tolerance_degrees(tol_));
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -342,7 +347,8 @@ void App::handle_active(const Tick& t) {
     ui::ActiveView v{ col,
                       side_fsm_.current_side(),
                       strokes_a_, strokes_b_,
-                      buzzer_flash_showing_, buzzer_on_ };
+                      buzzer_flash_showing_, buzzer_on_,
+                      ar.degrees };
     ui::draw_active(v);
 }
 
