@@ -315,17 +315,13 @@ void App::handle_active(const Tick& t) {
         save_session_();   // keep RTC RAM current so idle-sleep preserves counts
     }
 
-    float accel_mag = std::sqrt(t.accel_g.x*t.accel_g.x + t.accel_g.y*t.accel_g.y + t.accel_g.z*t.accel_g.z);
-    float gyro_mag  = std::sqrt(t.gyro_dps.x*t.gyro_dps.x + t.gyro_dps.y*t.gyro_dps.y + t.gyro_dps.z*t.gyro_dps.z);
-    float grav_dot_ref = g_now.x*g_zero_A_.x + g_now.y*g_zero_A_.y + g_now.z*g_zero_A_.z;
-    side_fsm_.update(t.now_ms, accel_mag, gyro_mag, grav_dot_ref);
-    if (side_fsm_.consume_switch()) {
-        stroke_fsm_.reset();
-        // Peeling and reattaching the device is unambiguous activity —
-        // reset the idle timer so we don't sleep right after a side switch.
-        last_activity_ms_ = t.now_ms;
-        save_session_();   // persist the new active side to RTC RAM
-    }
+    // Automatic gravity-polarity side detection is intentionally NOT run here.
+    // In real use the device sits screen-up on BOTH blade faces (you flip the
+    // knife, not the device), so gravity does not reverse between sides and the
+    // polarity signal can't distinguish them — and worse, it would override the
+    // user's manual choice. Side is controlled manually by B short-press below,
+    // which is authoritative and sticks. (SideFSM::update remains available and
+    // unit-tested for a future mount where the polarity does flip.)
 
     if (t.input == InputEvent::A_LONG) {
         transition(State::SUMMARY, t.now_ms);

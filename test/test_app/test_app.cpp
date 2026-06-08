@@ -407,33 +407,26 @@ void test_e2e_tilted_stone_target_angle_is_relative_to_g_zero(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 17.0f, angle_deg);
 }
 
-void test_e2e_side_switch_uses_g_zero_b(void) {
-    // After ZERO_CAL, the side auto-switches when the device comes to rest in the
-    // opposite-polarity (flipped) orientation — no peel spike, no 5s timeout. The
-    // snap-to-raw keeps grav_dot_ref accurate even across the antiparallel flip.
+void test_e2e_manual_side_switch_sticks(void) {
+    // Side is controlled manually (B short-press) and must STICK — gravity
+    // auto-detection is disabled because it can't distinguish a screen-up-on-
+    // both-faces mount, and must not revert the user's choice.
     App a;
-    a.begin(false);
     uint32_t t = 0;
-    advance(a, t, 2100);
-    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET
-    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE
-
-    Vec3 pose_A = {0.0f,  0.7071f, -0.7071f};
-    Vec3 pose_B = {0.0f, -0.7071f, +0.7071f};
-    advance(a, t, 100, InputEvent::A_SHORT, pose_A);
-    drive_still(a, t, pose_A);                 // capture A
-    advance(a, t, 100, InputEvent::A_SHORT, pose_B);
-    drive_still(a, t, pose_B);                 // capture B -> ACTIVE
-    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
-
-    // Flip back to side A and hold still (you'd flip back to A to start). Drive
-    // well past the 500ms settle window to wash out any transient from capture-B.
-    advance(a, t, 1200, InputEvent::NONE, pose_A, {0.0f, 0.0f, 0.0f});
+    reach_active(a, t);
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 
-    // Flip to side B and hold still -> auto-switch to B (active ref becomes g_zero_B).
-    advance(a, t, 800, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
+    // Manual toggle to B.
+    advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+
+    // Hold a side-A-polarity pose for 3s — must NOT auto-revert to A.
+    advance(a, t, 3000, InputEvent::NONE, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+
+    // Toggle back to A.
+    advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
 
 int main(int, char**) {
@@ -458,6 +451,6 @@ int main(int, char**) {
     RUN_TEST(test_active_classifier_green_at_target_pose);
     RUN_TEST(test_e2e_fresh_session_through_zero_cal_to_active);
     RUN_TEST(test_e2e_tilted_stone_target_angle_is_relative_to_g_zero);
-    RUN_TEST(test_e2e_side_switch_uses_g_zero_b);
+    RUN_TEST(test_e2e_manual_side_switch_sticks);
     return UNITY_END();
 }
