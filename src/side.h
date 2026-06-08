@@ -2,15 +2,21 @@
 #include <cstdint>
 #include "types.h"
 
+// Side detection by gravity polarity. The device's back faces the opposite blade
+// flat after a flip, so gravity (vs the side-A zero) reverses sign. We don't try
+// to catch the "peel" event — we simply notice when the device has come to rest
+// in the orientation belonging to the OTHER side and switch then. This is robust
+// to a slow hand-swap (peel, switch hands, reposition, reattach) that the old
+// spike+5s-timeout scheme would miss.
 class SideFSM {
 public:
-    static constexpr float    SPIKE_DEVIATION_G     = 0.5f;
-    static constexpr float    SETTLE_TOL_G          = 0.1f;
-    static constexpr float    SETTLE_GYRO_DPS       = 15.0f;  // settle also requires gyro below this
-    static constexpr uint32_t SETTLE_REQUIRED_MS    = 500;
-    static constexpr uint32_t POST_SPIKE_TIMEOUT_MS = 5000;
-    static constexpr uint32_t SUPPRESS_MS           = 2000;
+    static constexpr float    SETTLE_TOL_G       = 0.1f;   // accel within this of 1g => "at rest"
+    static constexpr float    SETTLE_GYRO_DPS    = 15.0f;  // and gyro below this
+    static constexpr float    FLIP_POLARITY_MIN  = 0.3f;   // grav_dot_ref must clearly indicate the other side
+    static constexpr uint32_t SETTLE_REQUIRED_MS = 500;    // held in the flipped pose this long => switch
+    static constexpr uint32_t SUPPRESS_MS        = 2000;   // ignore auto-detect after a manual toggle
 
+    // grav_dot_ref = dot(gravity_now, g_zero_A): positive on side A, negative on side B.
     void  update(uint32_t now_ms, float accel_mag_g, float gyro_mag_dps, float grav_dot_ref);
     void  manual_toggle(uint32_t now_ms);
     bool  consume_switch();
@@ -22,14 +28,10 @@ public:
     void restore_side(Side s) { side_ = s; }
 
 private:
-    enum Phase : uint8_t { STABLE, WAITING_SETTLE };
-
-    Phase    phase_              = STABLE;
-    uint32_t phase_entered_ms_   = 0;
-    uint32_t settle_started_ms_  = 0;
-    bool     settling_           = false;
-    uint32_t suppress_until_ms_  = 0;
-    bool     suppress_armed_     = false;
-    bool     switch_pending_     = false;
-    Side     side_               = Side::A;
+    Side     side_              = Side::A;
+    bool     switch_pending_    = false;
+    bool     flipping_          = false;  // accumulating time settled in the opposite-side pose
+    uint32_t flip_started_ms_   = 0;
+    uint32_t suppress_until_ms_ = 0;
+    bool     suppress_armed_    = false;
 };

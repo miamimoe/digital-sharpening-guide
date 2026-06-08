@@ -19,65 +19,75 @@ void test_starts_on_side_a_no_events(void) {
     TEST_ASSERT_FALSE(fsm.consume_switch());
 }
 
-void test_peel_flip_settle_triggers_switch(void) {
+void test_settled_in_flipped_pose_switches(void) {
     SideFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 200,  1.00f, 0.0f, +1.0f);
-    drive(fsm, t, 100,  1.80f, 0.0f, +1.0f);
-    drive(fsm, t, 200,  0.40f, 0.0f, -1.0f);
-    drive(fsm, t, 600,  1.00f, 0.0f, -1.0f);
+    drive(fsm, t, 300, 1.0f, 0.0f, +0.95f);   // resting on side A
+    drive(fsm, t, 600, 1.0f, 0.0f, -0.95f);   // resting flipped (side B) for >500ms
     TEST_ASSERT_TRUE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
 }
 
-void test_peel_no_flip_settle_no_switch(void) {
+void test_same_polarity_never_switches(void) {
     SideFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 200,  1.00f, 0.0f, +1.0f);
-    drive(fsm, t, 100,  1.80f, 0.0f, +1.0f);
-    drive(fsm, t, 200,  0.40f, 0.0f, +1.0f);
-    drive(fsm, t, 600,  1.00f, 0.0f, +1.0f);
+    drive(fsm, t, 2000, 1.0f, 0.0f, +0.95f);  // long rest on side A (e.g. sharpening)
     TEST_ASSERT_FALSE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
 }
 
-void test_peel_no_settle_within_timeout_resets(void) {
+void test_flipped_but_moving_does_not_switch(void) {
     SideFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 200,  1.00f, 0.0f, +1.0f);
-    drive(fsm, t, 100,  1.80f, 0.0f, +1.0f);
-    drive(fsm, t, 5500, 0.50f, 0.0f, -1.0f);
+    // Flipped polarity but moving (high gyro) the whole time -> not at rest.
+    drive(fsm, t, 1500, 1.0f, 50.0f, -0.95f);
     TEST_ASSERT_FALSE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
-}
-
-void test_settle_requires_gyro_quiet(void) {
-    // Peel + flip, then the accelerometer momentarily reads ~1g while the device
-    // is STILL being rotated (high gyro). That must NOT count as a settle.
-    SideFSM fsm;
-    uint32_t t = 0;
-    drive(fsm, t, 200, 1.00f,  0.0f, +1.0f);
-    drive(fsm, t, 100, 1.80f,  0.0f, +1.0f);   // spike
-    drive(fsm, t, 200, 0.40f,  0.0f, -1.0f);   // handling
-    drive(fsm, t, 600, 1.00f, 50.0f, -1.0f);   // accel looks settled, but still spinning
-    TEST_ASSERT_FALSE(fsm.consume_switch());
-    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
-    // Now it actually comes to rest → real settle → switch.
-    drive(fsm, t, 600, 1.00f,  0.0f, -1.0f);
+    // Comes to rest -> switches.
+    drive(fsm, t, 600, 1.0f, 0.0f, -0.95f);
     TEST_ASSERT_TRUE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
+}
+
+void test_brief_flipped_settle_then_back_does_not_switch(void) {
+    SideFSM fsm;
+    uint32_t t = 0;
+    drive(fsm, t, 300, 1.0f, 0.0f, -0.95f);   // flipped+settled but < 500ms
+    drive(fsm, t, 300, 1.0f, 0.0f, +0.95f);   // back to side-A pose
+    TEST_ASSERT_FALSE(fsm.consume_switch());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
+}
+
+void test_ambiguous_polarity_does_not_switch(void) {
+    SideFSM fsm;
+    uint32_t t = 0;
+    // Settled but gravity nearly perpendicular (|grav_dot_ref| < FLIP_POLARITY_MIN).
+    drive(fsm, t, 1500, 1.0f, 0.0f, -0.1f);
+    TEST_ASSERT_FALSE(fsm.consume_switch());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
+}
+
+void test_switch_back_from_b_to_a(void) {
+    SideFSM fsm;
+    uint32_t t = 0;
+    drive(fsm, t, 600, 1.0f, 0.0f, -0.95f);   // A -> B
+    TEST_ASSERT_TRUE(fsm.consume_switch());
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
+    drive(fsm, t, 600, 1.0f, 0.0f, +0.95f);   // B -> A (positive polarity is "flipped" for B)
+    TEST_ASSERT_TRUE(fsm.consume_switch());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
 }
 
 void test_manual_toggle_switches_and_suppresses_auto(void) {
     SideFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 100, 1.0f, 0.0f, +1.0f);
+    drive(fsm, t, 100, 1.0f, 0.0f, +0.95f);
     fsm.manual_toggle(t);
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
     TEST_ASSERT_TRUE(fsm.consume_switch());
-    drive(fsm, t, 100, 1.80f, 0.0f, -1.0f);
-    drive(fsm, t, 1800, 0.40f, 0.0f, -1.0f);
-    drive(fsm, t, 600,  1.00f, 0.0f, +1.0f);
+    // Still physically in the side-A pose (grav +0.95), which is "flipped" for B,
+    // but suppression must block auto-switch for 2s.
+    drive(fsm, t, 1500, 1.0f, 0.0f, +0.95f);
     TEST_ASSERT_FALSE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
 }
@@ -85,48 +95,25 @@ void test_manual_toggle_switches_and_suppresses_auto(void) {
 void test_suppression_expires_after_2s(void) {
     SideFSM fsm;
     uint32_t t = 0;
-    drive(fsm, t, 100, 1.0f, 0.0f, +1.0f);
-    fsm.manual_toggle(t);
+    drive(fsm, t, 100, 1.0f, 0.0f, +0.95f);
+    fsm.manual_toggle(t);            // -> B, suppress auto for 2s
     fsm.consume_switch();
-    drive(fsm, t, 2200, 1.0f, 0.0f, -1.0f);
-    drive(fsm, t, 100,  1.80f, 0.0f, -1.0f);
-    drive(fsm, t, 200,  0.40f, 0.0f, +1.0f);
-    drive(fsm, t, 600,  1.00f, 0.0f, +1.0f);
+    drive(fsm, t, 2100, 1.0f, 0.0f, +0.95f);  // wait out suppression (settled, flipped-for-B)
+    drive(fsm, t, 600,  1.0f, 0.0f, +0.95f);  // now 500ms+ settled-flipped -> switch back to A
     TEST_ASSERT_TRUE(fsm.consume_switch());
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)fsm.current_side());
-}
-
-void test_manual_toggle_during_peel_does_not_double_switch(void) {
-    SideFSM fsm;
-    uint32_t t = 0;
-    // Establish stable for 200ms
-    drive(fsm, t, 200, 1.0f, 0.0f, +1.0f);
-    // Start a peel (spike) — FSM enters WAITING_SETTLE
-    drive(fsm, t, 100, 1.80f, 0.0f, +1.0f);
-    drive(fsm, t, 100, 0.40f, 0.0f, -1.0f);  // in handling
-    // User manually toggles (unusual but valid)
-    fsm.manual_toggle(t);
-    fsm.consume_switch();
-    // Simulate the device settling back to its original (flipped from A's perspective) orientation
-    // After manual_toggle we're now "on B". If we settle with grav_dot_ref = -1 (flipped from capture),
-    // that means we're at "A physical orientation" — the side-aware check would say "on B, grav < 0" which
-    // does NOT trigger a flip (B expects positive grav_dot_ref). But without the abort fix, the phase
-    // would still be WAITING_SETTLE from before the toggle.
-    drive(fsm, t, 600, 1.0f, 0.0f, -1.0f);
-    // Expected: NO additional switch_pending_.
-    TEST_ASSERT_FALSE(fsm.consume_switch());
-    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)fsm.current_side());
 }
 
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_starts_on_side_a_no_events);
-    RUN_TEST(test_peel_flip_settle_triggers_switch);
-    RUN_TEST(test_peel_no_flip_settle_no_switch);
-    RUN_TEST(test_peel_no_settle_within_timeout_resets);
-    RUN_TEST(test_settle_requires_gyro_quiet);
+    RUN_TEST(test_settled_in_flipped_pose_switches);
+    RUN_TEST(test_same_polarity_never_switches);
+    RUN_TEST(test_flipped_but_moving_does_not_switch);
+    RUN_TEST(test_brief_flipped_settle_then_back_does_not_switch);
+    RUN_TEST(test_ambiguous_polarity_does_not_switch);
+    RUN_TEST(test_switch_back_from_b_to_a);
     RUN_TEST(test_manual_toggle_switches_and_suppresses_auto);
     RUN_TEST(test_suppression_expires_after_2s);
-    RUN_TEST(test_manual_toggle_during_peel_does_not_double_switch);
     return UNITY_END();
 }

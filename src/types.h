@@ -18,6 +18,7 @@ enum class State : uint8_t {
     SET_TOLERANCE,
     ZERO_CAL,                  // NEW
     ACTIVE,
+    REZERO,                    // re-capture current side's zero from within ACTIVE
     SUMMARY,
     FAULT,
     RESUME_PROMPT,

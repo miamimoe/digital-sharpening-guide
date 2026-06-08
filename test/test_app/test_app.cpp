@@ -408,13 +408,9 @@ void test_e2e_tilted_stone_target_angle_is_relative_to_g_zero(void) {
 }
 
 void test_e2e_side_switch_uses_g_zero_b(void) {
-    // After ZERO_CAL, simulate a peel/settle that flips gravity polarity.
-    // The active reference should swap from g_zero_A to g_zero_B; the side FSM
-    // detects the flip via grav_dot_ref polarity vs g_zero_A_.
-    //
-    // Use 45°-tilted poses (not antiparallel) so the Mahony filter can converge
-    // during the settle window without hitting the cross-product zero singularity
-    // that antiparallel ({0,0,-1} / {0,0,+1}) vectors produce.
+    // After ZERO_CAL, the side auto-switches when the device comes to rest in the
+    // opposite-polarity (flipped) orientation — no peel spike, no 5s timeout. The
+    // snap-to-raw keeps grav_dot_ref accurate even across the antiparallel flip.
     App a;
     a.begin(false);
     uint32_t t = 0;
@@ -422,29 +418,21 @@ void test_e2e_side_switch_uses_g_zero_b(void) {
     advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET
     advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE
 
-    // pose_A: 45° tilt around X (Y-dominant). pose_B: flipped about the edge axis.
     Vec3 pose_A = {0.0f,  0.7071f, -0.7071f};
     Vec3 pose_B = {0.0f, -0.7071f, +0.7071f};
     advance(a, t, 100, InputEvent::A_SHORT, pose_A);
-    drive_still(a, t, pose_A);
+    drive_still(a, t, pose_A);                 // capture A
     advance(a, t, 100, InputEvent::A_SHORT, pose_B);
-    drive_still(a, t, pose_B);
+    drive_still(a, t, pose_B);                 // capture B -> ACTIVE
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    // Flip back to side A and hold still (you'd flip back to A to start). Drive
+    // well past the 500ms settle window to wash out any transient from capture-B.
+    advance(a, t, 1200, InputEvent::NONE, pose_A, {0.0f, 0.0f, 0.0f});
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 
-    // Pre-converge the Mahony filter toward pose_B before the spike. The filter
-    // needs many ticks to converge because kp=0.5 at 100Hz produces small per-step
-    // corrections. While running at pose_B with accel_mag ≈ 1.0 (< SPIKE_DEVIATION_G),
-    // the SideFSM stays in STABLE — no premature switch.
-    advance(a, t, 5000, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
-
-    // Spike: magnitude 1.8g → deviation 0.8 > SPIKE_DEVIATION_G (0.5). Triggers FSM.
-    Vec3 spike = {0.0f, 1.8f, 0.0f};
-    // Settle at pose_B for 600ms. Filter is already converged to pose_B, so
-    // grav_dot_ref is reliably < 0 throughout the entire settle window.
-    advance(a, t,  50, InputEvent::NONE, spike, {0.0f, 0.0f, 0.0f});
-    advance(a, t, 600, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
-
+    // Flip to side B and hold still -> auto-switch to B (active ref becomes g_zero_B).
+    advance(a, t, 800, InputEvent::NONE, pose_B, {0.0f, 0.0f, 0.0f});
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
 }
 

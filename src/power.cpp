@@ -17,6 +17,7 @@ IdleConfig config_for(State s) {
         case State::RESUME_PROMPT:
         case State::SLEEP:
             return {0, 0};
+        case State::REZERO:         return {0, 0};            // never sleep mid-capture
         case State::SET_TARGET:     return { 90000, 120000};
         case State::SET_TOLERANCE:  return { 60000,  90000};
         case State::ACTIVE:         return {180000, 300000}; // strokes-based

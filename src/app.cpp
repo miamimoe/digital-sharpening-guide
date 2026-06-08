@@ -33,7 +33,10 @@ static Tolerance next_tolerance(Tolerance t) {
 }
 
 void App::begin(bool had_session_in_rtc_ram) {
-    filter_.begin(50.0f);
+    // kp=2.0 (up from the 0.5 placeholder): gives the accelerometer more authority
+    // so residual gyro bias can't drift the gravity estimate several degrees. The
+    // sharpening motion is slow enough that the accel is a reliable gravity ref.
+    filter_.begin(50.0f, 2.0f);
     filter_.set_bias(settings::load_gyro_bias());
     buzzer_on_ = settings::load_buzzer();
     tol_       = settings::load_tolerance();
@@ -80,6 +83,10 @@ void App::transition(State to, uint32_t now_ms) {
             break;
         case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_); break;
         case State::ZERO_CAL:      zc_rendered_ = ZeroCalSubstate::DONE; break;
+        case State::REZERO:
+            rezero_side_ = side_fsm_.current_side();
+            zc_fsm_.start();
+            break;
         case State::ACTIVE: {
             stroke_fsm_.reset();
             // Do NOT reset side_fsm_ here: the resume path (RESUME_PROMPT->ACTIVE)
@@ -212,6 +219,10 @@ void App::handle_zero_cal(const Tick& t) {
     }
     int total_capture_ms_remaining = ticks_remaining * (int)kLoopTickMs;
 
+    // Currently-moving cue for the progress screen, so a stalled countdown reads
+    // as "you're moving it" rather than a frozen device.
+    bool moving = !zero_cal::is_still_instant(t.accel_g, t.gyro_dps);
+
     bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
 
     // Prompt screens are static — redraw only on substate change (avoid a 50 Hz
@@ -220,11 +231,11 @@ void App::handle_zero_cal(const Tick& t) {
         case ZeroCalSubstate::PROMPT_A:
             if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(1, retry);
             break;
-        case ZeroCalSubstate::CAPTURE_A: ui::draw_zero_cal_progress(total_capture_ms_remaining); break;
+        case ZeroCalSubstate::CAPTURE_A: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
         case ZeroCalSubstate::PROMPT_B:
             if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(2, retry);
             break;
-        case ZeroCalSubstate::CAPTURE_B: ui::draw_zero_cal_progress(total_capture_ms_remaining); break;
+        case ZeroCalSubstate::CAPTURE_B: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
         case ZeroCalSubstate::DONE:      break;
     }
     zc_rendered_ = zc_substate_;
@@ -320,6 +331,12 @@ void App::handle_active(const Tick& t) {
         transition(State::SUMMARY, t.now_ms);
         return;
     }
+    if (t.input == InputEvent::A_SHORT) {
+        // Re-capture the current side's zero in place (e.g. after re-mounting or
+        // a bad side-B capture), then return to ACTIVE with the fresh reference.
+        transition(State::REZERO, t.now_ms);
+        return;
+    }
     if (t.input == InputEvent::B_SHORT) {
         side_fsm_.manual_toggle(t.now_ms);
         side_fsm_.consume_switch();
@@ -350,6 +367,27 @@ void App::handle_active(const Tick& t) {
                       buzzer_flash_showing_, buzzer_on_,
                       ar.degrees };
     ui::draw_active(v);
+}
+
+void App::handle_rezero(const Tick& t) {
+    // Abort (B short or long-press A) returns to ACTIVE leaving the zero unchanged.
+    if (t.input == InputEvent::B_SHORT || t.input == InputEvent::A_LONG) {
+        ui::clear();   // invalidate the ACTIVE dirty-region cache for a clean repaint
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    zc_fsm_.update(t.accel_g, t.gyro_dps);
+    if (zc_fsm_.done()) {
+        if (rezero_side_ == Side::A) g_zero_A_ = zc_fsm_.result();
+        else                         g_zero_B_ = zc_fsm_.result();
+        ui::clear();
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    int ticks_remaining = zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining();
+    if (zc_fsm_.phase() == zero_cal::Phase::WARMUP) ticks_remaining += zero_cal::AVERAGING_TICKS;
+    bool moving = !zero_cal::is_still_instant(t.accel_g, t.gyro_dps);
+    ui::draw_zero_cal_progress(ticks_remaining * (int)kLoopTickMs, moving);
 }
 
 void App::handle_summary(const Tick& t) {
@@ -401,6 +439,7 @@ void App::on_tick(const Tick& t) {
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
         case State::ACTIVE:        handle_active(t); break;
+        case State::REZERO:        handle_rezero(t); break;
         case State::SUMMARY:       handle_summary(t); break;
         case State::RESUME_PROMPT: handle_resume_prompt(t); break;
         case State::FAULT:         break;

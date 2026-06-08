@@ -27,7 +27,8 @@ private:
 namespace mahony {
     // Thresholds for the snap-to-raw recovery. All bring-up tunable — see
     // docs/superpowers/bringup/2026-04-23-hardware-bringup.md.
-    constexpr float SNAP_GYRO_DPS       = 10.0f;  // "still": below this gyro magnitude
+    constexpr float SNAP_GYRO_DPS       = 3.0f;   // "still": only re-anchor when truly set down,
+                                                  // not during in-hand handling (avoids angle twitch)
     constexpr float SNAP_ACCEL_TOL_G    = 0.10f;  // accel must be within this of 1g (pure gravity)
     constexpr float SNAP_DIVERGENCE_DEG = 8.0f;   // only snap when filter is this far off raw
     constexpr uint8_t SNAP_COOLDOWN_TICKS = 20;   // ~400ms at 50Hz: don't re-snap every tick

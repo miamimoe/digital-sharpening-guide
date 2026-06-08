@@ -41,6 +41,7 @@ private:
     void handle_set_target      (const Tick& t);
     void handle_set_tolerance   (const Tick& t);
     void handle_active          (const Tick& t);
+    void handle_rezero          (const Tick& t);
     void handle_summary         (const Tick& t);
     void handle_resume_prompt   (const Tick& t);
 
@@ -56,6 +57,9 @@ private:
     Vec3             g_zero_B_             = {0.0f, 0.0f, 0.0f};
 
     // ZERO_CAL substate machinery
+    // Which side a REZERO capture is refreshing (snapshot of the active side on entry).
+    Side             rezero_side_          = Side::A;
+
     ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_A;
     // Which prompt substate is currently painted, so the (static) prompt screen
     // is redrawn only on change instead of full-screen every 50 Hz tick.

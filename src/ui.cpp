@@ -22,9 +22,11 @@ namespace {
     char           s_last_angle[12] = "";
     bool           s_last_angle_valid = false;
 
-    // Throttle ZERO_CAL countdown to ~10 Hz (only repaint when tenths digit changes).
+    // Throttle ZERO_CAL countdown to ~10 Hz (only repaint when tenths digit or
+    // the moving-state changes).
     int  s_last_zc_tenths       = -1;
     bool s_last_zc_tenths_valid = false;
+    bool s_last_zc_moving        = false;
 
     uint16_t color_for(ColorState c) {
         switch (c) {
@@ -228,17 +230,25 @@ void draw_zero_cal_prompt(int step, bool retry) {
     }
 }
 
-void draw_zero_cal_progress(int remaining_ms) {
+void draw_zero_cal_progress(int remaining_ms, bool moving) {
     int tenths = remaining_ms / 100;
-    if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths) return;
+    if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths && moving == s_last_zc_moving) return;
     s_last_zc_tenths       = tenths;
     s_last_zc_tenths_valid = true;
+    s_last_zc_moving       = moving;
 
     M5.Display.fillScreen(COL_BLACK);
-    draw_centered("Hold still", 30, 2, COL_WHITE, COL_BLACK);
-    char buf[16];
-    std::snprintf(buf, sizeof buf, "%d.%ds", tenths / 10, tenths % 10);
-    draw_centered(buf, 70, 4, COL_WHITE, COL_BLACK);
+    if (moving) {
+        // The capture can't progress while the device is moving — say so loudly
+        // instead of showing a frozen countdown.
+        draw_centered("KEEP STILL", 24, 3, COL_RED, COL_BLACK);
+        draw_centered("(set it down)", 78, 2, COL_WHITE, COL_BLACK);
+    } else {
+        draw_centered("Hold still", 30, 2, COL_WHITE, COL_BLACK);
+        char buf[16];
+        std::snprintf(buf, sizeof buf, "%d.%ds", tenths / 10, tenths % 10);
+        draw_centered(buf, 70, 4, COL_WHITE, COL_BLACK);
+    }
 }
 
 void set_backlight(uint8_t percent) {
@@ -262,7 +272,7 @@ namespace ui {
     void draw_fault(FaultCode) {}
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
     void draw_zero_cal_prompt(int, bool) {}
-    void draw_zero_cal_progress(int) {}
+    void draw_zero_cal_progress(int, bool) {}
     void set_backlight(uint8_t) {}
 }
 #endif
