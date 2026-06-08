@@ -3,14 +3,6 @@
 
 namespace zero_cal {
 
-bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps) {
-    float a_mag = std::sqrt(accel_g.x*accel_g.x + accel_g.y*accel_g.y + accel_g.z*accel_g.z);
-    if (std::fabs(a_mag - 1.0f) >= STILL_ACCEL_MAG_TOL_G) return false;
-    float g_mag = std::sqrt(gyro_dps.x*gyro_dps.x + gyro_dps.y*gyro_dps.y + gyro_dps.z*gyro_dps.z);
-    if (g_mag >= STILL_GYRO_MAG_DPS) return false;
-    return true;
-}
-
 void CaptureFSM::start() {
     reset_to_warmup();
 }
@@ -23,12 +15,27 @@ void CaptureFSM::reset_to_warmup() {
     accum_count_    = 0;
     result_         = {0.0f, 0.0f, 0.0f};
     gyro_result_    = {0.0f, 0.0f, 0.0f};
+    anchored_       = false;   // re-anchor the drift reference on the next still sample
 }
 
 void CaptureFSM::update(Vec3 accel_g, Vec3 gyro_dps) {
     if (phase_ == Phase::IDLE || phase_ == Phase::DONE) return;
 
-    if (!is_still_instant(accel_g, gyro_dps)) {
+    // Accel-only stillness: magnitude near 1g AND direction close to the anchor.
+    float a_mag = std::sqrt(accel_g.x*accel_g.x + accel_g.y*accel_g.y + accel_g.z*accel_g.z);
+    bool mag_ok = std::fabs(a_mag - 1.0f) < STILL_ACCEL_MAG_TOL_G;
+    bool drift_ok = true;
+    if (!anchored_) {
+        accel_anchor_ = accel_g;
+        anchored_     = true;
+    } else {
+        float dx = accel_g.x - accel_anchor_.x;
+        float dy = accel_g.y - accel_anchor_.y;
+        float dz = accel_g.z - accel_anchor_.z;
+        drift_ok = std::sqrt(dx*dx + dy*dy + dz*dz) < STILL_DRIFT_TOL_G;
+    }
+    moving_ = !(mag_ok && drift_ok);
+    if (moving_) {
         reset_to_warmup();
         return;
     }

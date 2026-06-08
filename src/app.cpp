@@ -252,7 +252,7 @@ void App::handle_zero_cal(const Tick& t) {
 
     // Currently-moving cue for the progress screen, so a stalled countdown reads
     // as "you're moving it" rather than a frozen device.
-    bool moving = !zero_cal::is_still_instant(t.accel_g, t.gyro_dps);
+    bool moving = zc_fsm_.moving();
 
     bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
 
@@ -414,8 +414,7 @@ void App::handle_rezero(const Tick& t) {
     }
     int ticks_remaining = zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining();
     if (zc_fsm_.phase() == zero_cal::Phase::WARMUP) ticks_remaining += zero_cal::AVERAGING_TICKS;
-    bool moving = !zero_cal::is_still_instant(t.accel_g, t.gyro_dps);
-    ui::draw_zero_cal_progress(ticks_remaining * (int)kLoopTickMs, moving);
+    ui::draw_zero_cal_progress(ticks_remaining * (int)kLoopTickMs, zc_fsm_.moving());
 }
 
 void App::handle_summary(const Tick& t) {

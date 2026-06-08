@@ -3,16 +3,16 @@
 
 namespace zero_cal {
 
-// Stillness thresholds. These must tolerate a HAND-HELD capture: during zero-cal
-// the user holds the knife flat on the stone, so there's always hand tremor on
-// top of raw-gyro bias. The original tight values (0.01g/0.5dps, then 0.05g/8dps)
-// rejected that tremor and hung on "KEEP STILL". Loosened to hand-held-steady
-// levels — still well below an actual sharpening stroke (>0.3g, 30+ dps). If the
-// gate still can't pass (heavy bias/vibration), the user can force-capture (tap B).
-constexpr float STILL_ACCEL_MAG_TOL_G     = 0.10f;
-constexpr float STILL_GYRO_MAG_DPS        = 20.0f;
-
-bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps);
+// Stillness is gated on the ACCELEROMETER only, for a HAND-HELD capture (the user
+// holds the knife flat on the stone). Two checks:
+//   - magnitude: |‖a‖ − 1g| < MAG_TOL  (rejects gross translation)
+//   - direction drift: |a − anchor| < DRIFT_TOL  (rejects rotation/reposition)
+// Raw gyro is deliberately NOT a gate: it measures angular VELOCITY, which spikes
+// on hand tremor and stalled the capture on "KEEP STILL". Hand tremor oscillates
+// AROUND a point, so the accel direction stays near its anchor and passes; only a
+// real reposition drifts it out. Gyro is still averaged to estimate the bias.
+constexpr float STILL_ACCEL_MAG_TOL_G = 0.12f;
+constexpr float STILL_DRIFT_TOL_G     = 0.12f;   // ~7° of accel-direction drift
 
 // Derived from the real loop period (kLoopTickMs) so durations stay correct if
 // the loop rate ever changes: 500 ms warm-up, 1000 ms averaging (spec §4).
@@ -37,6 +37,8 @@ public:
     // Mean gyro (dps) over the averaging window = the gyro bias, since the gate
     // guarantees the device was still. Use to refresh the filter's bias estimate.
     Vec3  gyro_bias() const;
+    // True if the most recent update() saw motion (gate failed) — for the UI cue.
+    bool  moving()    const { return moving_; }
 
 private:
     void reset_to_warmup();
@@ -48,6 +50,9 @@ private:
     int   accum_count_     = 0;
     Vec3  result_          = {0.0f, 0.0f, 0.0f};
     Vec3  gyro_result_     = {0.0f, 0.0f, 0.0f};
+    Vec3  accel_anchor_    = {0.0f, 0.0f, 0.0f};
+    bool  anchored_        = false;
+    bool  moving_          = false;
 };
 
 }  // namespace zero_cal

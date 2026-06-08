@@ -4,49 +4,18 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-void test_still_sample_passes_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -1.0f};   // 1g magnitude
-    Vec3 gyro  = {0.0f, 0.0f,  0.0f};   // no rotation
-    TEST_ASSERT_TRUE(zero_cal::is_still_instant(accel, gyro));
-}
-
-void test_high_gyro_fails_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -1.0f};
-    Vec3 gyro  = {0.0f, 0.0f, 25.0f};   // 25 dps > 20 dps threshold
-    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
-}
-
-void test_off_gravity_magnitude_fails_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -1.2f};   // |a| - 1g = 0.2 > 0.1g
-    Vec3 gyro  = {0.0f, 0.0f,  0.0f};
-    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
-}
-
-void test_below_gravity_magnitude_fails_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -0.8f};   // |a| = 0.8g, deviation 0.2g > 0.1g
-    Vec3 gyro  = {0.0f, 0.0f,  0.0f};
-    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
-}
-
-void test_zero_accel_vector_fails_gate(void) {
-    // Zero-magnitude accel (e.g. IMU not yet producing samples) deviates 1g
-    // from gravity — well outside the 0.1g threshold — so it correctly fails.
-    Vec3 accel = {0.0f, 0.0f, 0.0f};
-    Vec3 gyro  = {0.0f, 0.0f, 0.0f};
-    TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
-}
-
-static Vec3 still_accel = {0.0f, 0.0f, -1.0f};
-static Vec3 still_gyro  = {0.0f, 0.0f,  0.0f};
-static Vec3 jitter_accel = {0.0f, 0.0f, -1.3f}; // |a| = 1.3g, deviation 0.3g > 0.1g threshold
+static Vec3 still_accel  = {0.0f, 0.0f, -1.0f};
+static Vec3 still_gyro   = {0.0f, 0.0f,  0.0f};
+// Magnitude jitter: |a| = 1.3g, deviation 0.3g > MAG_TOL.
+static Vec3 mag_jitter   = {0.0f, 0.0f, -1.3f};
+// Direction jitter: |a| ~ 1g but rotated ~30deg from the {0,0,-1} anchor
+// (|a - anchor| ~ 0.52g > DRIFT_TOL) — caught WITHOUT any gyro.
+static Vec3 drift_jitter = {0.5f, 0.0f, -0.8660254f};
 
 void test_capture_completes_after_warmup_and_averaging(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    // 500ms warmup at 50 Hz = 25 ticks; 1s averaging = 50 ticks (75 total).
-    for (int i = 0; i < 100; ++i) {
-        fsm.update(still_accel, still_gyro);
-    }
+    for (int i = 0; i < 100; ++i) fsm.update(still_accel, still_gyro);
     TEST_ASSERT_TRUE(fsm.done());
     Vec3 result = fsm.result();
     TEST_ASSERT_FLOAT_WITHIN(0.001f,  0.0f, result.x);
@@ -54,32 +23,61 @@ void test_capture_completes_after_warmup_and_averaging(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, result.z);
 }
 
-void test_jitter_during_warmup_restarts(void) {
+void test_magnitude_jitter_restarts(void) {
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    for (int i = 0; i < 15; ++i) fsm.update(still_accel, still_gyro);   // mid-warmup (<25)
-    fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
+    for (int i = 0; i < 15; ++i) fsm.update(still_accel, still_gyro);
+    fsm.update(mag_jitter, still_gyro);                       // -> restart
     for (int i = 0; i < 15; ++i) fsm.update(still_accel, still_gyro);
     TEST_ASSERT_FALSE(fsm.done());
     TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
 }
 
-void test_jitter_during_averaging_restarts(void) {
+void test_direction_drift_restarts_without_gyro(void) {
+    // The whole point of the new gate: a rotation (direction drift) is caught by
+    // the accelerometer alone, with the gyro reading ZERO the entire time.
     zero_cal::CaptureFSM fsm;
     fsm.start();
-    for (int i = 0; i < 25; ++i) fsm.update(still_accel, still_gyro);   // complete warmup
-    for (int i = 0; i < 20; ++i) fsm.update(still_accel, still_gyro);   // mid-averaging (<50)
-    fsm.update(jitter_accel, still_gyro);                                // jitter -> restart
+    for (int i = 0; i < 30; ++i) fsm.update(still_accel, still_gyro);  // into averaging
+    fsm.update(drift_jitter, still_gyro);                              // rotated -> restart
     TEST_ASSERT_FALSE(fsm.done());
     TEST_ASSERT_EQUAL(zero_cal::Phase::WARMUP, fsm.phase());
 }
 
+void test_hand_tremor_gyro_does_not_block_capture(void) {
+    // Regression: large gyro (hand tremor velocity) must NOT stall the capture as
+    // long as the accel direction stays put. Feed a steady accel with 30 dps gyro.
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    Vec3 tremor_gyro = {30.0f, -25.0f, 20.0f};
+    for (int i = 0; i < 100; ++i) fsm.update(still_accel, tremor_gyro);
+    TEST_ASSERT_TRUE(fsm.done());
+}
+
+void test_moving_flag_tracks_stillness(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    fsm.update(still_accel, still_gyro);
+    TEST_ASSERT_FALSE(fsm.moving());
+    fsm.update(drift_jitter, still_gyro);
+    TEST_ASSERT_TRUE(fsm.moving());
+}
+
+void test_gyro_bias_is_mean_over_window(void) {
+    zero_cal::CaptureFSM fsm;
+    fsm.start();
+    Vec3 bias = {1.0f, 2.0f, -3.0f};
+    for (int i = 0; i < 100; ++i) fsm.update(still_accel, bias);
+    TEST_ASSERT_TRUE(fsm.done());
+    Vec3 gb = fsm.gyro_bias();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  1.0f, gb.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f,  2.0f, gb.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -3.0f, gb.z);
+}
+
 void test_idle_update_is_noop(void) {
     zero_cal::CaptureFSM fsm;
-    // Did NOT call start(); FSM is IDLE.
-    for (int i = 0; i < 200; ++i) {
-        fsm.update(still_accel, still_gyro);
-    }
+    for (int i = 0; i < 200; ++i) fsm.update(still_accel, still_gyro);
     TEST_ASSERT_FALSE(fsm.done());
     TEST_ASSERT_EQUAL(zero_cal::Phase::IDLE, fsm.phase());
 }
@@ -96,15 +94,13 @@ void test_reset_clears_state(void) {
 
 int main(int, char**) {
     UNITY_BEGIN();
-    RUN_TEST(test_still_sample_passes_gate);
-    RUN_TEST(test_high_gyro_fails_gate);
-    RUN_TEST(test_off_gravity_magnitude_fails_gate);
-    RUN_TEST(test_below_gravity_magnitude_fails_gate);
-    RUN_TEST(test_zero_accel_vector_fails_gate);
     RUN_TEST(test_capture_completes_after_warmup_and_averaging);
-    RUN_TEST(test_jitter_during_warmup_restarts);
-    RUN_TEST(test_jitter_during_averaging_restarts);
-    RUN_TEST(test_reset_clears_state);
+    RUN_TEST(test_magnitude_jitter_restarts);
+    RUN_TEST(test_direction_drift_restarts_without_gyro);
+    RUN_TEST(test_hand_tremor_gyro_does_not_block_capture);
+    RUN_TEST(test_moving_flag_tracks_stillness);
+    RUN_TEST(test_gyro_bias_is_mean_over_window);
     RUN_TEST(test_idle_update_is_noop);
+    RUN_TEST(test_reset_clears_state);
     return UNITY_END();
 }
