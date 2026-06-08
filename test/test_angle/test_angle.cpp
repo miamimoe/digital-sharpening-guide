@@ -85,6 +85,64 @@ void test_classify_tolerance_boundaries_are_green(void) {
     TEST_ASSERT_EQUAL(ColorState::GREEN, classify(18.0f, 17.0f, 1.0f)); // exactly target+tol
 }
 
+// --- Edge-axis bevel measurement ---
+
+static Vec3 deg_pose(float bevel_deg, float skew_deg) {
+    // Gravity in body frame for a blade raised `bevel` about the edge (body +x)
+    // and skewed `skew` lengthwise (about body +y), from flat g=(0,0,-1).
+    float b = bevel_deg * (float)M_PI / 180.0f;
+    float s = skew_deg  * (float)M_PI / 180.0f;
+    // R_y(s) * R_x(b) * (0,0,-1)
+    return { -std::sin(s)*std::cos(b), std::sin(b), -std::cos(s)*std::cos(b) };
+}
+
+void test_edge_axis_from_flat_and_raise(void) {
+    Vec3 flat   = {0.0f, 0.0f, -1.0f};
+    Vec3 raised = deg_pose(17.0f, 0.0f);
+    Vec3 e = compute_edge_axis(flat, raised);
+    // Edge axis should be body +x (within sign/normalization).
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, std::fabs(e.x));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, e.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, e.z);
+}
+
+void test_edge_axis_degenerate_on_tiny_raise(void) {
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e = compute_edge_axis(flat, flat);   // no raise
+    TEST_ASSERT_TRUE(e.x == 0.0f && e.y == 0.0f && e.z == 0.0f);
+}
+
+void test_bevel_flat_is_zero(void) {
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e    = {1.0f, 0.0f, 0.0f};
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, bevel_angle(flat, e, flat));
+}
+
+void test_bevel_equals_raise_no_skew(void) {
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e    = {1.0f, 0.0f, 0.0f};
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 17.0f, bevel_angle(flat, e, deg_pose(17.0f, 0.0f)));
+}
+
+void test_bevel_is_skew_invariant(void) {
+    // The whole point: 10 deg of lengthwise skew must NOT inflate a 17 deg bevel.
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e    = {1.0f, 0.0f, 0.0f};
+    float b = bevel_angle(flat, e, deg_pose(17.0f, 10.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.4f, 17.0f, b);   // within ~0.4 deg despite 10 deg skew
+}
+
+void test_bevel_works_on_flipped_face(void) {
+    // The other blade face: gravity in the opposite hemisphere (device flipped).
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e    = {1.0f, 0.0f, 0.0f};
+    // Flat on the flipped face -> gravity ~ +z -> bevel 0 after fold.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, bevel_angle(flat, e, (Vec3){0.0f, 0.0f, 1.0f}));
+    // Raised 17 deg on the flipped face.
+    Vec3 b_pose = {0.0f, -std::sin(17.0f*(float)M_PI/180.0f), std::cos(17.0f*(float)M_PI/180.0f)};
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 17.0f, bevel_angle(flat, e, b_pose));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_zero_deviation_is_zero_degrees);
@@ -98,5 +156,11 @@ int main(int, char**) {
     RUN_TEST(test_classify_below_target_returns_blue);
     RUN_TEST(test_classify_below_target_is_blue_not_red);
     RUN_TEST(test_classify_tolerance_boundaries_are_green);
+    RUN_TEST(test_edge_axis_from_flat_and_raise);
+    RUN_TEST(test_edge_axis_degenerate_on_tiny_raise);
+    RUN_TEST(test_bevel_flat_is_zero);
+    RUN_TEST(test_bevel_equals_raise_no_skew);
+    RUN_TEST(test_bevel_is_skew_invariant);
+    RUN_TEST(test_bevel_works_on_flipped_face);
     return UNITY_END();
 }

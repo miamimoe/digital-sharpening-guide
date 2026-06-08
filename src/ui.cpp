@@ -223,7 +223,7 @@ void draw_zero_cal_prompt(int step, bool retry) {
     char hdr[16];
     std::snprintf(hdr, sizeof hdr, "ZERO CAL  %d/2", step);
     draw_centered(hdr, 8, 2, COL_WHITE, COL_BLACK);
-    draw_centered(step == 1 ? "Lay flat on stone" : "Flip & lay flat", 40, 1, COL_WHITE, COL_BLACK);
+    draw_centered(step == 1 ? "Lay flat on stone" : "Raise to your angle", 40, 1, COL_WHITE, COL_BLACK);
     draw_centered("Press A, hold still", 60, 1, COL_WHITE, COL_BLACK);
     if (retry) {
         draw_centered("HOLD STILL", 92, 3, COL_RED, COL_BLACK);

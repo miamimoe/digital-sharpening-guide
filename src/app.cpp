@@ -51,22 +51,21 @@ void App::begin(bool had_session_in_rtc_ram) {
 
     // Wake-from-sleep path. RTC RAM only survives deep sleep (battery pull
     // clears it), so a present session implies wake — skip BOOT splash and
-    // resume immediately. The defensive guard below routes incomplete sessions
-    // (missing g_zero_A or g_zero_B) into ZERO_CAL instead of RESUME_PROMPT.
+    // resume immediately. The defensive guard below routes an incomplete session
+    // (no flat reference captured) into ZERO_CAL instead of RESUME_PROMPT.
     if (had_session_in_rtc_ram && session::has_session()) {
         const auto& s = session::state();
         target_deg_         = s.target_deg;
         tol_                = s.tolerance;
-        g_zero_A_           = s.g_zero_A;
-        g_zero_B_           = s.g_zero_B;
+        g_flat_             = s.g_flat;
+        edge_axis_          = s.edge_axis;
         strokes_a_          = s.strokes_A;
         strokes_b_          = s.strokes_B;
         session_started_ms_ = s.session_started_ms;
         side_fsm_.restore_side(s.current_side);
-        if (is_zero_vec(g_zero_A_) || is_zero_vec(g_zero_B_)) {
+        if (is_zero_vec(g_flat_)) {
             transition(State::ZERO_CAL, 0);
-            zc_substate_ = is_zero_vec(g_zero_A_) ? ZeroCalSubstate::PROMPT_A
-                                                  : ZeroCalSubstate::PROMPT_B;
+            zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
             return;
         }
         transition(State::RESUME_PROMPT, 0);
@@ -92,7 +91,6 @@ void App::transition(State to, uint32_t now_ms) {
         case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_); break;
         case State::ZERO_CAL:      zc_rendered_ = ZeroCalSubstate::DONE; break;
         case State::REZERO:
-            rezero_side_ = side_fsm_.current_side();
             zc_fsm_.start();
             break;
         case State::ACTIVE: {
@@ -131,8 +129,8 @@ void App::save_session_() {
     SessionState ss;
     ss.target_deg         = target_deg_;
     ss.tolerance          = tol_;
-    ss.g_zero_A           = g_zero_A_;
-    ss.g_zero_B           = g_zero_B_;
+    ss.g_flat             = g_flat_;
+    ss.edge_axis          = edge_axis_;
     ss.strokes_A          = strokes_a_;
     ss.strokes_B          = strokes_b_;
     ss.current_side       = side_fsm_.current_side();
@@ -183,57 +181,54 @@ void App::handle_zero_cal(const Tick& t) {
         return;
     }
 
-    auto on_capture_done = [&](Vec3& dest, ZeroCalSubstate next) {
-        dest         = zc_fsm_.result();
-        refresh_gyro_bias_(zc_fsm_.gyro_bias());
-        zc_substate_ = next;
-    };
-
     switch (zc_substate_) {
-        case ZeroCalSubstate::PROMPT_A:
+        case ZeroCalSubstate::PROMPT_FLAT:
             if (input == InputEvent::A_SHORT) {
                 zc_fsm_.start();
-                zc_substate_ = ZeroCalSubstate::CAPTURE_A;
+                zc_substate_ = ZeroCalSubstate::CAPTURE_FLAT;
             }
             break;
 
-        case ZeroCalSubstate::CAPTURE_A:
-            if (input == InputEvent::B_SHORT) {
-                // Force-capture escape hatch: stillness gate can't pass (tremor /
-                // gyro bias / vibration). Use the current reading as-is.
-                Vec3 forced = normalized(t.accel_g);
-                if (!is_zero_vec(forced)) { g_zero_A_ = forced; zc_substate_ = ZeroCalSubstate::PROMPT_B; }
-                break;
-            }
-            zc_fsm_.update(t.accel_g, t.gyro_dps);
-            if (zc_fsm_.done()) {
-                on_capture_done(g_zero_A_, ZeroCalSubstate::PROMPT_B);
-            }
-            break;
-
-        case ZeroCalSubstate::PROMPT_B:
-            if (input == InputEvent::A_SHORT) {
-                zc_fsm_.start();
-                zc_substate_ = ZeroCalSubstate::CAPTURE_B;
-            }
-            break;
-
-        case ZeroCalSubstate::CAPTURE_B: {
-            bool force = false;
+        case ZeroCalSubstate::CAPTURE_FLAT: {
+            // B = force-capture escape hatch (stillness gate can't pass).
+            bool done = false;
             if (input == InputEvent::B_SHORT) {
                 Vec3 forced = normalized(t.accel_g);
-                if (!is_zero_vec(forced)) { g_zero_B_ = forced; force = true; }
+                if (!is_zero_vec(forced)) { g_flat_ = forced; done = true; }
             } else {
                 zc_fsm_.update(t.accel_g, t.gyro_dps);
                 if (zc_fsm_.done()) {
-                    g_zero_B_ = zc_fsm_.result();
+                    g_flat_ = zc_fsm_.result();
                     refresh_gyro_bias_(zc_fsm_.gyro_bias());
-                    force = true;
+                    done = true;
                 }
             }
-            if (force) {
+            if (done) zc_substate_ = ZeroCalSubstate::PROMPT_RAISE;
+            break;
+        }
+
+        case ZeroCalSubstate::PROMPT_RAISE:
+            if (input == InputEvent::A_SHORT) {
+                zc_fsm_.start();
+                zc_substate_ = ZeroCalSubstate::CAPTURE_RAISE;
+            }
+            break;
+
+        case ZeroCalSubstate::CAPTURE_RAISE: {
+            bool done = false;
+            Vec3 raised = {0.0f, 0.0f, 0.0f};
+            if (input == InputEvent::B_SHORT) {
+                raised = normalized(t.accel_g);
+                if (!is_zero_vec(raised)) done = true;
+            } else {
+                zc_fsm_.update(t.accel_g, t.gyro_dps);
+                if (zc_fsm_.done()) { raised = zc_fsm_.result(); done = true; }
+            }
+            if (done) {
+                // {0,0,0} if the raise was too small — bevel_angle then falls back
+                // to the total-tilt method, so this degrades gracefully.
+                edge_axis_ = compute_edge_axis(g_flat_, raised);
                 zc_substate_ = ZeroCalSubstate::DONE;
-                // transition(ACTIVE) builds SessionState and calls mark_active itself.
                 session_started_ms_ = t.now_ms;
                 side_fsm_.reset();   // fresh session begins on side A
                 transition(State::ACTIVE, t.now_ms);
@@ -264,15 +259,15 @@ void App::handle_zero_cal(const Tick& t) {
     // Prompt screens are static — redraw only on substate change (avoid a 50 Hz
     // full-screen fillScreen flicker). Progress self-throttles in ui.cpp.
     switch (zc_substate_) {
-        case ZeroCalSubstate::PROMPT_A:
+        case ZeroCalSubstate::PROMPT_FLAT:
             if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(1, retry);
             break;
-        case ZeroCalSubstate::CAPTURE_A: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
-        case ZeroCalSubstate::PROMPT_B:
+        case ZeroCalSubstate::CAPTURE_FLAT:  ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
+        case ZeroCalSubstate::PROMPT_RAISE:
             if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(2, retry);
             break;
-        case ZeroCalSubstate::CAPTURE_B: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
-        case ZeroCalSubstate::DONE:      break;
+        case ZeroCalSubstate::CAPTURE_RAISE: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
+        case ZeroCalSubstate::DONE:          break;
     }
     zc_rendered_ = zc_substate_;
 }
@@ -316,7 +311,7 @@ void App::handle_set_tolerance(const Tick& t) {
     } else if (t.input == InputEvent::A_SHORT) {
         settings::save_tolerance(tol_);
         // confirm tolerance, persist, advance into ZERO_CAL.
-        zc_substate_ = ZeroCalSubstate::PROMPT_A;
+        zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
         transition(State::ZERO_CAL, t.now_ms);
     }
 }
@@ -337,9 +332,10 @@ void App::handle_active(const Tick& t) {
     }
     Vec3 g_now = filter_.gravity();
 
-    Vec3 g_zero_active = (side_fsm_.current_side() == Side::A) ? g_zero_A_ : g_zero_B_;
-    AngleResult ar = compute_angle(g_zero_active, g_now);
-    ColorState  col = classify(ar.degrees, target_deg_, tolerance_degrees(tol_));
+    // Skew-corrected bevel about the captured edge axis. One reference (g_flat_,
+    // edge_axis_) serves both blade faces — the flipped face is folded internally.
+    float bevel = bevel_angle(g_flat_, edge_axis_, g_now);
+    ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_));
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -397,7 +393,7 @@ void App::handle_active(const Tick& t) {
                       side_fsm_.current_side(),
                       strokes_a_, strokes_b_,
                       buzzer_flash_showing_, buzzer_on_,
-                      ar.degrees };
+                      bevel };
     ui::draw_active(v);
 }
 
@@ -410,8 +406,8 @@ void App::handle_rezero(const Tick& t) {
     }
     zc_fsm_.update(t.accel_g, t.gyro_dps);
     if (zc_fsm_.done()) {
-        if (rezero_side_ == Side::A) g_zero_A_ = zc_fsm_.result();
-        else                         g_zero_B_ = zc_fsm_.result();
+        g_flat_ = zc_fsm_.result();   // refresh the flat reference in place
+        refresh_gyro_bias_(zc_fsm_.gyro_bias());
         ui::clear();
         transition(State::ACTIVE, t.now_ms);
         return;

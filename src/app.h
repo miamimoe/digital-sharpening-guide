@@ -29,8 +29,8 @@ public:
     uint32_t  last_activity_ms() const { return last_activity_ms_; }
     uint32_t  last_stroke_ms()   const { return last_stroke_ms_; }
     ZeroCalSubstate  zero_cal_substate() const { return zc_substate_; }
-    Vec3             g_zero_a()          const { return g_zero_A_; }
-    Vec3             g_zero_b()          const { return g_zero_B_; }
+    Vec3             g_flat()            const { return g_flat_; }
+    Vec3             edge_axis()         const { return edge_axis_; }
 
 private:
     void transition(State to, uint32_t now_ms);
@@ -54,14 +54,11 @@ private:
     float            target_deg_           = 17.0f;
     Tolerance        tol_                  = Tolerance::NORMAL;
     bool             buzzer_on_            = false;
-    Vec3             g_zero_A_             = {0.0f, 0.0f, 0.0f};
-    Vec3             g_zero_B_             = {0.0f, 0.0f, 0.0f};
+    Vec3             g_flat_               = {0.0f, 0.0f, 0.0f};  // flat-on-stone reference
+    Vec3             edge_axis_            = {0.0f, 0.0f, 0.0f};  // cutting-edge / hinge axis
 
     // ZERO_CAL substate machinery
-    // Which side a REZERO capture is refreshing (snapshot of the active side on entry).
-    Side             rezero_side_          = Side::A;
-
-    ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_A;
+    ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_FLAT;
     // Which prompt substate is currently painted, so the (static) prompt screen
     // is redrawn only on change instead of full-screen every 50 Hz tick.
     ZeroCalSubstate  zc_rendered_          = ZeroCalSubstate::DONE;

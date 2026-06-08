@@ -26,10 +26,10 @@ enum class State : uint8_t {
 };
 
 enum class ZeroCalSubstate : uint8_t {
-    PROMPT_A,
-    CAPTURE_A,
-    PROMPT_B,
-    CAPTURE_B,
+    PROMPT_FLAT,     // "lay flat on stone"
+    CAPTURE_FLAT,
+    PROMPT_RAISE,    // "raise the spine to your angle" (reveals the edge axis)
+    CAPTURE_RAISE,
     DONE
 };
 

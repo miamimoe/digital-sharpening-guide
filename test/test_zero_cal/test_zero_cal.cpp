@@ -30,7 +30,7 @@ void test_below_gravity_magnitude_fails_gate(void) {
 
 void test_zero_accel_vector_fails_gate(void) {
     // Zero-magnitude accel (e.g. IMU not yet producing samples) deviates 1g
-    // from gravity — well outside the 0.01g threshold — so it correctly fails.
+    // from gravity — well outside the 0.1g threshold — so it correctly fails.
     Vec3 accel = {0.0f, 0.0f, 0.0f};
     Vec3 gyro  = {0.0f, 0.0f, 0.0f};
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
