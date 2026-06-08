@@ -12,18 +12,18 @@ void test_still_sample_passes_gate(void) {
 
 void test_high_gyro_fails_gate(void) {
     Vec3 accel = {0.0f, 0.0f, -1.0f};
-    Vec3 gyro  = {0.0f, 0.0f, 10.0f};   // 10 dps > 8 dps threshold
+    Vec3 gyro  = {0.0f, 0.0f, 25.0f};   // 25 dps > 20 dps threshold
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
 }
 
 void test_off_gravity_magnitude_fails_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -1.1f};   // |a| - 1g = 0.1 > 0.05g
+    Vec3 accel = {0.0f, 0.0f, -1.2f};   // |a| - 1g = 0.2 > 0.1g
     Vec3 gyro  = {0.0f, 0.0f,  0.0f};
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
 }
 
 void test_below_gravity_magnitude_fails_gate(void) {
-    Vec3 accel = {0.0f, 0.0f, -0.9f};   // |a| = 0.9g, deviation 0.1g > 0.05g
+    Vec3 accel = {0.0f, 0.0f, -0.8f};   // |a| = 0.8g, deviation 0.2g > 0.1g
     Vec3 gyro  = {0.0f, 0.0f,  0.0f};
     TEST_ASSERT_FALSE(zero_cal::is_still_instant(accel, gyro));
 }
@@ -38,7 +38,7 @@ void test_zero_accel_vector_fails_gate(void) {
 
 static Vec3 still_accel = {0.0f, 0.0f, -1.0f};
 static Vec3 still_gyro  = {0.0f, 0.0f,  0.0f};
-static Vec3 jitter_accel = {0.0f, 0.0f, -1.1f}; // |a| = 1.1g, deviation 0.1g > 0.01g threshold
+static Vec3 jitter_accel = {0.0f, 0.0f, -1.3f}; // |a| = 1.3g, deviation 0.3g > 0.1g threshold
 
 void test_capture_completes_after_warmup_and_averaging(void) {
     zero_cal::CaptureFSM fsm;

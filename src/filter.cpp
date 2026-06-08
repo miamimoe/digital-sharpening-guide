@@ -26,7 +26,9 @@ void MahonyFilter::update(Vec3 gyro_dps, Vec3 accel_g) {
     float ax = accel_g.x, ay = accel_g.y, az = accel_g.z;
 
     float an = ax*ax + ay*ay + az*az;
-    if (an > 0.0f) {
+    // Trust the accel as gravity only when its magnitude is near 1g; during a
+    // stroke it carries linear acceleration and must not steer the estimate.
+    if (an > 0.0f && std::fabs(std::sqrt(an) - 1.0f) < mahony::ACCEL_TRUST_TOL_G) {
         float inv = inv_sqrt(an);
         ax *= inv; ay *= inv; az *= inv;
 

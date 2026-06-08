@@ -11,6 +11,13 @@ static inline bool is_zero_vec(Vec3 v) {
     return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f;
 }
 
+// Unit vector, or {0,0,0} for a degenerate (near-zero) input.
+static inline Vec3 normalized(Vec3 v) {
+    float m = std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    if (m < 1e-3f) return {0.0f, 0.0f, 0.0f};
+    return {v.x/m, v.y/m, v.z/m};
+}
+
 static PresetSelection next_preset(PresetSelection p) {
     switch (p) {
         case PresetSelection::P12:    return PresetSelection::P15;
@@ -33,10 +40,11 @@ static Tolerance next_tolerance(Tolerance t) {
 }
 
 void App::begin(bool had_session_in_rtc_ram) {
-    // kp=2.0 (up from the 0.5 placeholder): gives the accelerometer more authority
-    // so residual gyro bias can't drift the gravity estimate several degrees. The
-    // sharpening motion is slow enough that the accel is a reliable gravity ref.
-    filter_.begin(50.0f, 2.0f);
+    // Mahony gains. With per-session gyro-bias refresh (zero-cal) and online bias
+    // correction (ki>0) doing the bias work, kp can be modest — high kp would only
+    // pull the estimate toward dynamic stroke acceleration. kp=0.8, ki=0.02 is the
+    // bring-up starting point (validate against a real stroke).
+    filter_.begin(50.0f, 0.8f, 0.02f);
     filter_.set_bias(settings::load_gyro_bias());
     buzzer_on_ = settings::load_buzzer();
     tol_       = settings::load_tolerance();
@@ -111,6 +119,14 @@ void App::transition(State to, uint32_t now_ms) {
     }
 }
 
+void App::refresh_gyro_bias_(Vec3 bias) {
+    // Per-session gyro-bias refresh from the zero-cal still window. Removes the
+    // turn-on/thermal drift the first-boot-only BIAS_CAL can't track, so the
+    // Mahony filter starts each session with an accurate bias.
+    filter_.set_bias(bias);
+    settings::save_gyro_bias(bias);
+}
+
 void App::save_session_() {
     SessionState ss;
     ss.target_deg         = target_deg_;
@@ -169,6 +185,7 @@ void App::handle_zero_cal(const Tick& t) {
 
     auto on_capture_done = [&](Vec3& dest, ZeroCalSubstate next) {
         dest         = zc_fsm_.result();
+        refresh_gyro_bias_(zc_fsm_.gyro_bias());
         zc_substate_ = next;
     };
 
@@ -181,6 +198,13 @@ void App::handle_zero_cal(const Tick& t) {
             break;
 
         case ZeroCalSubstate::CAPTURE_A:
+            if (input == InputEvent::B_SHORT) {
+                // Force-capture escape hatch: stillness gate can't pass (tremor /
+                // gyro bias / vibration). Use the current reading as-is.
+                Vec3 forced = normalized(t.accel_g);
+                if (!is_zero_vec(forced)) { g_zero_A_ = forced; zc_substate_ = ZeroCalSubstate::PROMPT_B; }
+                break;
+            }
             zc_fsm_.update(t.accel_g, t.gyro_dps);
             if (zc_fsm_.done()) {
                 on_capture_done(g_zero_A_, ZeroCalSubstate::PROMPT_B);
@@ -194,16 +218,28 @@ void App::handle_zero_cal(const Tick& t) {
             }
             break;
 
-        case ZeroCalSubstate::CAPTURE_B:
-            zc_fsm_.update(t.accel_g, t.gyro_dps);
-            if (zc_fsm_.done()) {
-                on_capture_done(g_zero_B_, ZeroCalSubstate::DONE);
+        case ZeroCalSubstate::CAPTURE_B: {
+            bool force = false;
+            if (input == InputEvent::B_SHORT) {
+                Vec3 forced = normalized(t.accel_g);
+                if (!is_zero_vec(forced)) { g_zero_B_ = forced; force = true; }
+            } else {
+                zc_fsm_.update(t.accel_g, t.gyro_dps);
+                if (zc_fsm_.done()) {
+                    g_zero_B_ = zc_fsm_.result();
+                    refresh_gyro_bias_(zc_fsm_.gyro_bias());
+                    force = true;
+                }
+            }
+            if (force) {
+                zc_substate_ = ZeroCalSubstate::DONE;
                 // transition(ACTIVE) builds SessionState and calls mark_active itself.
                 session_started_ms_ = t.now_ms;
                 side_fsm_.reset();   // fresh session begins on side A
                 transition(State::ACTIVE, t.now_ms);
             }
             break;
+        }
 
         case ZeroCalSubstate::DONE:
             // Should not be reached — DONE triggers the transition above.

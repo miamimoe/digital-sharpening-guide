@@ -34,7 +34,7 @@ namespace {
             case ColorState::BLUE:  return COL_BLUE;
             case ColorState::RED:   return COL_RED;
         }
-        return COL_BLACK;
+        __builtin_unreachable();
     }
 
     // Default GLCD font advances 6 px/char wide, 8 px tall, scaled by text size.
@@ -240,9 +240,10 @@ void draw_zero_cal_progress(int remaining_ms, bool moving) {
     M5.Display.fillScreen(COL_BLACK);
     if (moving) {
         // The capture can't progress while the device is moving — say so loudly
-        // instead of showing a frozen countdown.
-        draw_centered("KEEP STILL", 24, 3, COL_RED, COL_BLACK);
-        draw_centered("(set it down)", 78, 2, COL_WHITE, COL_BLACK);
+        // instead of showing a frozen countdown, and offer the force-capture.
+        draw_centered("KEEP STILL", 18, 3, COL_RED, COL_BLACK);
+        draw_centered("set it down", 58, 1, COL_WHITE, COL_BLACK);
+        draw_centered("or tap B to capture", 84, 1, COL_WHITE, COL_BLACK);
     } else {
         draw_centered("Hold still", 30, 2, COL_WHITE, COL_BLACK);
         char buf[16];

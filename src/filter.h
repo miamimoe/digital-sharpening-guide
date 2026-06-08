@@ -33,6 +33,11 @@ namespace mahony {
     constexpr float SNAP_DIVERGENCE_DEG = 8.0f;   // only snap when filter is this far off raw
     constexpr uint8_t SNAP_COOLDOWN_TICKS = 20;   // ~400ms at 50Hz: don't re-snap every tick
 
+    // The accelerometer is only a valid gravity reference when |a| is near 1g.
+    // During a stroke (linear acceleration) it isn't — gate the Mahony correction
+    // on this so the angle doesn't spike at stroke turnarounds.
+    constexpr float ACCEL_TRUST_TOL_G   = 0.15f;
+
     // True when the filter's gravity estimate has drifted from a trustworthy raw
     // gravity reading while the device is held still — the cue to nudge_to_gravity().
     bool should_snap(Vec3 g_filter, Vec3 accel_g, Vec3 gyro_dps);

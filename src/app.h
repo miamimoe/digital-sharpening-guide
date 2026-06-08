@@ -35,6 +35,7 @@ public:
 private:
     void transition(State to, uint32_t now_ms);
     void save_session_();   // snapshot current ACTIVE session into RTC RAM
+    void refresh_gyro_bias_(Vec3 bias);  // apply + persist a freshly-measured gyro bias
     void handle_boot            (const Tick& t);
     void handle_bias_cal        (const Tick& t);
     void handle_zero_cal        (const Tick& t);

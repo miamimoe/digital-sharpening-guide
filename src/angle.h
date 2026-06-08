@@ -3,7 +3,10 @@
 
 struct AngleResult {
     float degrees;
-    int   direction_sign; // -1 = angle decreased (BLUE), 0 = at ref, +1 = angle increased (RED)
+    // Signed projection onto n_back: -1 below the reference tilt, +1 above, 0 at
+    // the reference. NOT used by classify() (which is magnitude-vs-target); kept
+    // for a possible future edge-axis/signed-pitch formulation.
+    int   direction_sign;
 };
 
 // Returns the angle (degrees) between g_ref and g_now plus a direction sign.

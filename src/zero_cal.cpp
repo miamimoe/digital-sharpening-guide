@@ -19,8 +19,10 @@ void CaptureFSM::reset_to_warmup() {
     phase_          = Phase::WARMUP;
     ticks_in_phase_ = 0;
     accum_          = {0.0f, 0.0f, 0.0f};
+    gyro_accum_     = {0.0f, 0.0f, 0.0f};
     accum_count_    = 0;
     result_         = {0.0f, 0.0f, 0.0f};
+    gyro_result_    = {0.0f, 0.0f, 0.0f};
 }
 
 void CaptureFSM::update(Vec3 accel_g, Vec3 gyro_dps) {
@@ -47,10 +49,14 @@ void CaptureFSM::update(Vec3 accel_g, Vec3 gyro_dps) {
     accum_.x += accel_g.x;
     accum_.y += accel_g.y;
     accum_.z += accel_g.z;
+    gyro_accum_.x += gyro_dps.x;
+    gyro_accum_.y += gyro_dps.y;
+    gyro_accum_.z += gyro_dps.z;
     ++accum_count_;
 
     if (ticks_in_phase_ >= AVERAGING_TICKS) {
         float n = (float)accum_count_;
+        gyro_result_ = { gyro_accum_.x / n, gyro_accum_.y / n, gyro_accum_.z / n };
         Vec3 mean = { accum_.x / n, accum_.y / n, accum_.z / n };
         // Normalize (spec §4 step 6). Averaging unit vectors yields magnitude < 1;
         // downstream consumers (grav_dot_ref polarity in side.cpp) expect a unit
@@ -78,6 +84,10 @@ int CaptureFSM::averaging_remaining() const {
 
 Vec3 CaptureFSM::result() const {
     return result_;
+}
+
+Vec3 CaptureFSM::gyro_bias() const {
+    return gyro_result_;
 }
 
 }  // namespace zero_cal

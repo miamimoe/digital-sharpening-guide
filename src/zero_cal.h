@@ -3,14 +3,14 @@
 
 namespace zero_cal {
 
-// Stillness thresholds. The spec's original 0.01g / 0.5 dps proved unachievable
-// on real MPU6886 hardware: a genuinely still device reads ~0.012g of accel
-// magnitude error (scale/offset) and up to ~2.7 dps of raw gyro (bias+noise),
-// so the warm-up never completed and the capture hung. Loosened to measured
-// at-rest noise with margin — still far tighter than a real sharpening motion
-// (>0.1g, tens of dps) so motion is still rejected. Bring-up tunable.
-constexpr float STILL_ACCEL_MAG_TOL_G     = 0.05f;
-constexpr float STILL_GYRO_MAG_DPS        = 8.0f;
+// Stillness thresholds. These must tolerate a HAND-HELD capture: during zero-cal
+// the user holds the knife flat on the stone, so there's always hand tremor on
+// top of raw-gyro bias. The original tight values (0.01g/0.5dps, then 0.05g/8dps)
+// rejected that tremor and hung on "KEEP STILL". Loosened to hand-held-steady
+// levels — still well below an actual sharpening stroke (>0.3g, 30+ dps). If the
+// gate still can't pass (heavy bias/vibration), the user can force-capture (tap B).
+constexpr float STILL_ACCEL_MAG_TOL_G     = 0.10f;
+constexpr float STILL_GYRO_MAG_DPS        = 20.0f;
 
 bool is_still_instant(Vec3 accel_g, Vec3 gyro_dps);
 
@@ -34,6 +34,9 @@ public:
     // Ticks left in AVERAGING. Same caveat as warmup_remaining().
     int   averaging_remaining() const;
     Vec3  result()    const;
+    // Mean gyro (dps) over the averaging window = the gyro bias, since the gate
+    // guarantees the device was still. Use to refresh the filter's bias estimate.
+    Vec3  gyro_bias() const;
 
 private:
     void reset_to_warmup();
@@ -41,8 +44,10 @@ private:
     Phase phase_           = Phase::IDLE;
     int   ticks_in_phase_  = 0;
     Vec3  accum_           = {0.0f, 0.0f, 0.0f};
+    Vec3  gyro_accum_      = {0.0f, 0.0f, 0.0f};
     int   accum_count_     = 0;
     Vec3  result_          = {0.0f, 0.0f, 0.0f};
+    Vec3  gyro_result_     = {0.0f, 0.0f, 0.0f};
 };
 
 }  // namespace zero_cal

@@ -429,6 +429,41 @@ void test_e2e_manual_side_switch_sticks(void) {
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
 
+void test_rezero_updates_current_side_zero(void) {
+    // A short-press in ACTIVE enters REZERO; a still capture replaces the current
+    // side's zero and returns to ACTIVE, leaving the other side's zero untouched.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);                       // ACTIVE, side A, g_zero_A = {0,0,-1}
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
+
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
+
+    Vec3 new_pose = {0.5f, 0.0f, -0.8660254f}; // re-capture at a new (still) pose
+    advance(a, t, 1700, InputEvent::NONE, new_pose, {0.0f, 0.0f, 0.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+
+    Vec3 za = a.g_zero_a();
+    TEST_ASSERT_FLOAT_WITHIN(0.02f,  0.5f,        za.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.02f, -0.8660254f,  za.z);
+    Vec3 zb = a.g_zero_b();                    // side B untouched
+    TEST_ASSERT_FLOAT_WITHIN(0.02f,  1.0f, zb.z);
+}
+
+void test_rezero_abort_leaves_zero_unchanged(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
+    advance(a, t, 300, InputEvent::NONE,    {0.5f, 0.0f, -0.8660254f}, {0,0,0});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.5f, 0.0f, -0.8660254f}, {0,0,0});
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    Vec3 za = a.g_zero_a();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, za.z);   // unchanged
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_without_session_goes_to_set_target);
@@ -452,5 +487,7 @@ int main(int, char**) {
     RUN_TEST(test_e2e_fresh_session_through_zero_cal_to_active);
     RUN_TEST(test_e2e_tilted_stone_target_angle_is_relative_to_g_zero);
     RUN_TEST(test_e2e_manual_side_switch_sticks);
+    RUN_TEST(test_rezero_updates_current_side_zero);
+    RUN_TEST(test_rezero_abort_leaves_zero_unchanged);
     return UNITY_END();
 }
