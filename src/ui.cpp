@@ -98,11 +98,11 @@ void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection 
 void draw_set_tolerance(Tolerance tol) {
     clear();
     draw_centered("TOLERANCE", 8, 1, COL_WHITE, COL_BLACK);
-    const char* label = "NORMAL +-2";
+    const char* label = "NORMAL +-3";
     switch (tol) {
-        case Tolerance::TIGHT:  label = "TIGHT +-1";  break;
-        case Tolerance::NORMAL: label = "NORMAL +-2"; break;
-        case Tolerance::EASY:   label = "EASY +-3";   break;
+        case Tolerance::TIGHT:  label = "TIGHT +-2";  break;
+        case Tolerance::NORMAL: label = "NORMAL +-3"; break;
+        case Tolerance::EASY:   label = "EASY +-5";   break;
     }
     draw_centered(label, 52, 3, COL_WHITE, COL_BLACK);
     draw_centered("A:Confirm   B:Change", 118, 1, COL_WHITE, COL_BLACK);
@@ -181,7 +181,7 @@ void draw_active(const ActiveView& v) {
 void draw_summary(float target_deg, Tolerance tol, uint32_t a, uint32_t b, uint32_t duration_s) {
     clear();
     draw_centered("SESSION", 4, 2, COL_WHITE, COL_BLACK);
-    const char* t = (tol == Tolerance::TIGHT) ? "T1" : (tol == Tolerance::NORMAL) ? "N2" : "E3";
+    const char* t = (tol == Tolerance::TIGHT) ? "T2" : (tol == Tolerance::NORMAL) ? "N3" : "E5";
     char buf[48];
     M5.Display.setTextColor(COL_WHITE, COL_BLACK);
     M5.Display.setTextSize(2);
@@ -206,7 +206,7 @@ void draw_fault(FaultCode code) {
 void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b, int seconds_remaining) {
     clear();
     draw_centered("RESUME?", 8, 3, COL_WHITE, COL_BLACK);
-    const char* t = (tol == Tolerance::TIGHT) ? "1" : (tol == Tolerance::NORMAL) ? "2" : "3";
+    const char* t = (tol == Tolerance::TIGHT) ? "2" : (tol == Tolerance::NORMAL) ? "3" : "5";
     char buf[40];
     std::snprintf(buf, sizeof buf, "Tgt:%d  Tol:+-%s", (int)target_deg, t);
     draw_centered(buf, 48, 2, COL_WHITE, COL_BLACK);

@@ -64,10 +64,12 @@ enum class FaultCode : uint8_t {
 };
 
 inline float tolerance_degrees(Tolerance t) {
+    // Human-achievable green-zone half-widths (a person, not a robot, holding a
+    // knife with live feedback). ±1° was unrealistic; these are the realistic set.
     switch (t) {
-        case Tolerance::TIGHT:  return 1.0f;
-        case Tolerance::NORMAL: return 2.0f;
-        case Tolerance::EASY:   return 3.0f;
+        case Tolerance::TIGHT:  return 2.0f;
+        case Tolerance::NORMAL: return 3.0f;
+        case Tolerance::EASY:   return 5.0f;
     }
     __builtin_unreachable();
 }
