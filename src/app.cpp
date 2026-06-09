@@ -383,6 +383,9 @@ void App::handle_active(const Tick& t) {
     if (t.input == InputEvent::B_LONG) {
         buzzer_on_ = !buzzer_on_;
         settings::save_buzzer(buzzer_on_);
+        // Audible confirmation when enabling — also a self-test that the buzzer
+        // works (silence on disable confirms "off").
+        if (buzzer_on_) feedback::beep_confirm();
         buzzer_flash_until_   = t.now_ms + 800;
         buzzer_flash_showing_ = true;
         last_activity_ms_     = t.now_ms;
