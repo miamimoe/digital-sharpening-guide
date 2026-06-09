@@ -4,6 +4,7 @@
 #include <M5Unified.h>
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 
 // Landscape layout: M5StickC Plus panel is 135x240 native; setRotation(1) gives
 // a 240(W) x 135(H) canvas, which is how the device is held in use.
@@ -45,6 +46,17 @@ namespace {
         M5.Display.setTextSize(size);
         int x = (SCR_W - text_w(s, size)) / 2;
         if (x < 0) x = 0;
+        M5.Display.setCursor(x, y);
+        M5.Display.print(s);
+    }
+
+    // Center a string horizontally within the column [x0, x0 + region_w).
+    void draw_centered_in(const char* s, int x0, int region_w, int y, int size,
+                          uint16_t fg, uint16_t bg) {
+        M5.Display.setTextColor(fg, bg);
+        M5.Display.setTextSize(size);
+        int x = x0 + (region_w - text_w(s, size)) / 2;
+        if (x < x0) x = x0;
         M5.Display.setCursor(x, y);
         M5.Display.print(s);
     }
@@ -109,9 +121,18 @@ void draw_set_tolerance(Tolerance tol) {
 }
 
 void draw_active(const ActiveView& v) {
+    // Two equal columns: ANGLE (left) | STROKE (right). Both rendered at the same
+    // large text size so neither reads as secondary.
+    constexpr int DIV_X   = 120;          // column divider / right-column origin
+    constexpr int LABEL_Y = 24;           // small column headers
+    constexpr int NUM_Y   = 52;           // big numbers (size 5 -> 40 px tall)
+    constexpr int SUB_Y   = 102;          // other-side stroke count, under STROKE
+    constexpr int NUM_SZ  = 5;
+    const uint16_t bg = color_for(v.color);
+
     bool color_changed = !s_last_valid || s_last.color != v.color;
     if (color_changed) {
-        M5.Display.fillScreen(color_for(v.color));
+        M5.Display.fillScreen(bg);
         // Legend strip across the top.
         M5.Display.fillRect(8,   4, 12, 12, COL_BLUE);
         M5.Display.fillRect(78,  4, 12, 12, COL_GREEN);
@@ -121,48 +142,44 @@ void draw_active(const ActiveView& v) {
         M5.Display.setCursor(24,  6); M5.Display.print("LOW");
         M5.Display.setCursor(94,  6); M5.Display.print("OK");
         M5.Display.setCursor(162, 6); M5.Display.print("HIGH");
+        // Column divider + static headers.
+        M5.Display.fillRect(DIV_X - 1, 22, 2, SCR_H - 22, COL_WHITE);
+        draw_centered_in("ANGLE",  0,     DIV_X,         LABEL_Y, 2, COL_WHITE, bg);
+        draw_centered_in("STROKE", DIV_X, SCR_W - DIV_X, LABEL_Y, 2, COL_WHITE, bg);
     }
 
     bool counts_changed =
         s_last.current_side != v.current_side ||
         s_last.strokes_A != v.strokes_A ||
         s_last.strokes_B != v.strokes_B;
-    // The buzzer overlay sits over the count band; when it clears (or a color
-    // change wiped the band) we must repaint the count.
+    // The buzzer overlay sits over the lower band; when it clears (or a color
+    // change wiped the screen) we must repaint the numbers it covered.
     bool flash_ended = s_last_valid && s_last.buzzer_flash && !v.buzzer_flash;
+
+    // Right column: current-side stroke count (big) + other-side count (small).
     if (color_changed || counts_changed || flash_ended) {
-        M5.Display.fillRect(0, 22, SCR_W, SCR_H - 22, color_for(v.color));
         uint32_t big = (v.current_side == Side::A) ? v.strokes_A : v.strokes_B;
         uint32_t sm  = (v.current_side == Side::A) ? v.strokes_B : v.strokes_A;
         char other_label = (v.current_side == Side::A) ? 'B' : 'A';
         char buf[12];
         std::snprintf(buf, sizeof buf, "%u", (unsigned)big);
-        M5.Display.setTextColor(COL_WHITE);
-        M5.Display.setTextSize(6);
-        int bx = (SCR_W - text_w(buf, 6)) / 2;
-        if (bx < 0) bx = 0;
-        M5.Display.setCursor(bx, 42);
-        M5.Display.print(buf);
+        M5.Display.fillRect(DIV_X + 1, NUM_Y, SCR_W - DIV_X - 1, 8 * NUM_SZ, bg);
+        draw_centered_in(buf, DIV_X, SCR_W - DIV_X, NUM_Y, NUM_SZ, COL_WHITE, bg);
         char sbuf[16];
         std::snprintf(sbuf, sizeof sbuf, "%c:%u", other_label, (unsigned)sm);
-        M5.Display.setTextSize(2);
-        int sx = SCR_W - 4 - text_w(sbuf, 2);
-        if (sx < 0) sx = 0;
-        M5.Display.setCursor(sx, SCR_H - 20);
-        M5.Display.print(sbuf);
+        M5.Display.fillRect(DIV_X + 1, SUB_Y, SCR_W - DIV_X - 1, 16, bg);
+        draw_centered_in(sbuf, DIV_X, SCR_W - DIV_X, SUB_Y, 2, COL_WHITE, bg);
     }
 
-    // Live angle (secondary), bottom-left. Repaint its small region only when the
-    // value changes or the band beneath it was just repainted.
+    // Left column: live angle as a whole number. Rounding to an integer also
+    // means we only repaint when the displayed degree actually changes, so the
+    // value no longer flickers on sub-degree jitter.
     char abuf[12];
-    std::snprintf(abuf, sizeof abuf, "%.1f", (double)v.angle_deg);
-    if ((color_changed || counts_changed || flash_ended)
+    std::snprintf(abuf, sizeof abuf, "%ld", std::lround(v.angle_deg));
+    if (color_changed || flash_ended
         || !s_last_angle_valid || std::strcmp(abuf, s_last_angle) != 0) {
-        M5.Display.fillRect(0, SCR_H - 22, 92, 22, color_for(v.color));
-        M5.Display.setTextColor(COL_WHITE);
-        M5.Display.setTextSize(2);
-        M5.Display.setCursor(6, SCR_H - 20);
-        M5.Display.print(abuf);
+        M5.Display.fillRect(0, NUM_Y, DIV_X - 1, 8 * NUM_SZ, bg);
+        draw_centered_in(abuf, 0, DIV_X, NUM_Y, NUM_SZ, COL_WHITE, bg);
         std::strncpy(s_last_angle, abuf, sizeof s_last_angle - 1);
         s_last_angle[sizeof s_last_angle - 1] = '\0';
         s_last_angle_valid = true;
