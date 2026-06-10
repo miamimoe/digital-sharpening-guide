@@ -71,11 +71,21 @@ void update_backlight(uint32_t now_ms, State current,
 #ifndef UNIT_TEST
 [[noreturn]] void enter_deep_sleep() {
     M5.Display.setBrightness(0);
-    // Use M5Unified's board-aware deep sleep: it calls Display.sleep() (cutting
-    // the backlight rail correctly for this board) and configures the power-key
-    // wake source (esp_sleep_enable_ext0_wakeup on GPIO35 for M5StickC Plus).
-    // Hand-rolling the EXT1 mask was both backlight- and wake-source-fragile.
-    M5.Power.deepSleep();
+    // M5Unified's deepSleep() only arms its _wakeupPin, which is UNSET on the
+    // AXP192 StickC Plus (set only for the Plus2) — on this board it enters deep
+    // sleep with no wake source, and the sole escape is the AXP hardware dance
+    // (hold 6 s to cut power, then ~2 s press to boot). Arm EXT0 on GPIO35 (the
+    // AXP192 IRQ line, active-low) ourselves: a short power-key press asserts
+    // the IRQ and wakes the chip. PEK IRQs are enabled by AXP192 power-on
+    // default. Clear all pending IRQ flags first (write-1-to-clear), otherwise
+    // the line may already be low and the device would wake instantly.
+    M5.Power.Axp192.writeRegister8(0x44, 0xFF);
+    M5.Power.Axp192.writeRegister8(0x45, 0xFF);
+    M5.Power.Axp192.writeRegister8(0x46, 0xFF);
+    M5.Power.Axp192.writeRegister8(0x47, 0xFF);
+    M5.Power.Axp192.writeRegister8(0x4D, 0xFF);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
+    M5.Power.deepSleep();  // Display.sleep() + esp_deep_sleep_start(); EXT0 stays armed
     while (true) {}  // deepSleep() does not return
 }
 #else

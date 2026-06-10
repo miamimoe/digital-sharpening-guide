@@ -29,6 +29,11 @@ void setup() {
     M5.begin(cfg);
     setCpuFrequencyMhz(80);  // 80 MHz is ample for 50 Hz loop; saves ~25 mA
 
+    // Consume any pending AXP192 power-key press (reads + clears the IRQ flag).
+    // The press that woke us from deep sleep would otherwise surface as a
+    // BtnPWR click on the first M5.update() and immediately put us back to sleep.
+    M5.Power.getKeyState();
+
     ui::begin();
     feedback::begin();
     power::begin();
@@ -69,6 +74,13 @@ void loop() {
     g_next_tick_ms += TICK_PERIOD_MS;
 
     M5.update();
+    // Power-key short press = "off" (deep sleep). The matching "on" is the EXT0
+    // wake on GPIO35 armed in power::enter_deep_sleep(). An in-progress session
+    // is in RTC RAM, so waking lands on the RESUME? prompt. The AXP192's 6 s
+    // hard power-off remains available as the hardware escape hatch.
+    if (M5.BtnPWR.wasClicked()) {
+        power::enter_deep_sleep();
+    }
     bool a_pressed = M5.BtnA.isPressed();
     bool b_pressed = M5.BtnB.isPressed();
     InputEvent ev = g_input.update(now, a_pressed, b_pressed);
