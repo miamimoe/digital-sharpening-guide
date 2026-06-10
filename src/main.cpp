@@ -42,21 +42,6 @@ void setup() {
 
     FaultCode fc = imu::begin();
 
-    // First-boot gyro bias capture: run BEFORE handing control to App so the
-    // filter has a valid bias from the start. App::handle_bias_cal still
-    // draws the 10s countdown and clears first_boot on completion.
-    if (fc == FaultCode::NONE && settings::is_first_boot()) {
-        ui::draw_bias_cal(10);
-        Vec3 bias;
-        if (imu::capture_gyro_bias(bias)) {
-            settings::save_gyro_bias(bias);
-            settings::clear_first_boot();
-            // App::begin below will skip BIAS_CAL since first_boot is cleared.
-        }
-        // If capture fails (device never stilled for 60s), leave first_boot
-        // set so the state machine's BIAS_CAL screen retries on this run.
-    }
-
     g_app.begin(had_session_in_rtc);
 
     // Push initial fault if IMU failed.
@@ -73,6 +58,13 @@ void loop() {
     if ((int32_t)(now - g_next_tick_ms) < 0) {
         delay(1);
         return;
+    }
+    // Catch-up clamp: if the scheduler fell more than 5 periods behind (e.g. a
+    // long blocking call), resync instead of replaying ticks back-to-back —
+    // burst catch-up ticks would over-integrate the Mahony filter, which
+    // assumes a fixed 20 ms dt per update.
+    if ((int32_t)(now - g_next_tick_ms) > (int32_t)(5 * TICK_PERIOD_MS)) {
+        g_next_tick_ms = now;
     }
     g_next_tick_ms += TICK_PERIOD_MS;
 

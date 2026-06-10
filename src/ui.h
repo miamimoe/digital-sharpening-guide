@@ -15,7 +15,6 @@ namespace ui {
     void begin();
     void clear();
     void draw_boot();
-    void draw_bias_cal(int seconds_remaining);
     void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset);
     void draw_set_tolerance(Tolerance tol);
     void draw_active(const ActiveView& v);

@@ -13,7 +13,6 @@ struct Vec3 {
 
 enum class State : uint8_t {
     BOOT,
-    BIAS_CAL,
     SET_TARGET,
     SET_TOLERANCE,
     ZERO_CAL,                  // NEW

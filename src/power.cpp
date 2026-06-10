@@ -11,16 +11,18 @@ namespace power {
 IdleConfig config_for(State s) {
     switch (s) {
         case State::BOOT:
-        case State::BIAS_CAL:
-        case State::ZERO_CAL:
-        case State::FAULT:
         case State::RESUME_PROMPT:
         case State::SLEEP:
             return {0, 0};
-        case State::REZERO:         return {0, 0};            // never sleep mid-capture
+        case State::ZERO_CAL:       return { 60000, 120000};
+        // An in-progress REZERO capture never sleeps: app.cpp refreshes
+        // last_activity_ms_ while the capture FSM is progressing or the user is
+        // handling the device, so only an abandoned static screen idles out.
+        case State::REZERO:         return { 60000, 120000};
+        case State::FAULT:          return { 60000, 300000};
         case State::SET_TARGET:     return { 90000, 120000};
         case State::SET_TOLERANCE:  return { 60000,  90000};
-        case State::ACTIVE:         return {180000, 300000}; // strokes-based
+        case State::ACTIVE:         return {180000, 300000}; // strokes-or-activity-based
         case State::SUMMARY:        return { 60000,  90000};
     }
     __builtin_unreachable();
@@ -34,7 +36,10 @@ bool check_idle(uint32_t now_ms, State current,
     auto cfg = config_for(current);
     if (cfg.sleep_ms == 0) return false;
 
-    uint32_t reference = (current == State::ACTIVE) ? last_stroke_ms : last_activity_ms;
+    // ACTIVE keys on the LATER of strokes and other activity (buttons, motion).
+    uint32_t reference = (current == State::ACTIVE)
+        ? (last_stroke_ms > last_activity_ms ? last_stroke_ms : last_activity_ms)
+        : last_activity_ms;
     return (now_ms - reference) >= cfg.sleep_ms;
 }
 
@@ -54,7 +59,10 @@ void update_backlight(uint32_t now_ms, State current,
         ui::set_backlight(baseline_pct);
         return;
     }
-    uint32_t reference = (current == State::ACTIVE) ? last_stroke_ms : last_activity_ms;
+    // Same reference as check_idle: ACTIVE uses the later of strokes and activity.
+    uint32_t reference = (current == State::ACTIVE)
+        ? (last_stroke_ms > last_activity_ms ? last_stroke_ms : last_activity_ms)
+        : last_activity_ms;
     uint32_t idle = now_ms - reference;
     uint8_t pct = (idle >= cfg.dim_ms) ? dim_pct : baseline_pct;
     ui::set_backlight(pct);

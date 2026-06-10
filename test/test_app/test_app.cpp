@@ -38,7 +38,6 @@ static void zero_cal_flat_raise(App& a, uint32_t& t, Vec3 flat_pose, Vec3 raise_
 void setUp(void) {
     settings::save_tolerance(Tolerance::NORMAL);
     settings::save_buzzer(false);
-    settings::clear_first_boot();
     session::clear();
 }
 void tearDown(void) {}

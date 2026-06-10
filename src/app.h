@@ -37,7 +37,6 @@ private:
     void save_session_();   // snapshot current ACTIVE session into RTC RAM
     void refresh_gyro_bias_(Vec3 bias);  // apply + persist a freshly-measured gyro bias
     void handle_boot            (const Tick& t);
-    void handle_bias_cal        (const Tick& t);
     void handle_zero_cal        (const Tick& t);
     void handle_set_target      (const Tick& t);
     void handle_set_tolerance   (const Tick& t);
@@ -68,8 +67,8 @@ private:
     // after a snap fires (see handle_active).
     uint8_t          snap_cooldown_        = 0;
 
-    // Last whole-second value rendered for a countdown screen (BIAS_CAL,
-    // RESUME_PROMPT) so they repaint once per second instead of every tick.
+    // Last whole-second value rendered for a countdown screen (RESUME_PROMPT)
+    // so it repaints once per second instead of every tick.
     int              last_countdown_sec_   = -1;
 
     uint32_t         strokes_a_            = 0;

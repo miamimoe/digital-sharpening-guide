@@ -2,7 +2,6 @@
 
 #ifndef UNIT_TEST
 #include <M5Unified.h>
-#include <cmath>
 
 namespace imu {
 
@@ -46,42 +45,6 @@ bool read(Vec3& accel_g, Vec3& gyro_dps) {
     return a_ok && g_ok;
 }
 
-bool capture_gyro_bias(Vec3& bias_out_dps) {
-    constexpr int      SAMPLES          = 1000;    // 10 s @ 100 Hz
-    constexpr float    STILLNESS_G      = 0.15f;   // |accel mag - 1| must stay under this
-    constexpr uint32_t TICK_MS          = 10;
-    constexpr uint32_t MAX_DURATION_MS  = 60000;   // give up after 60s of continuous motion
-    double sx = 0, sy = 0, sz = 0;
-    uint32_t start = millis();
-    uint32_t last  = start;
-    int n = 0;
-    while (n < SAMPLES) {
-        uint32_t now = millis();
-        if (now - start > MAX_DURATION_MS) {
-            // Device never settled; return failure so BIAS_CAL UX can retry or fall back.
-            return false;
-        }
-        if (now - last < TICK_MS) { delay(1); continue; }
-        last = now;
-        Vec3 a, g;
-        // No fresh sample this tick is benign; skip it. A truly dead IMU never
-        // produces fresh data and is caught by the MAX_DURATION_MS timeout above.
-        if (!read(a, g)) continue;
-        float mag = sqrtf(a.x*a.x + a.y*a.y + a.z*a.z);
-        if (fabsf(mag - 1.0f) > STILLNESS_G) {
-            sx = sy = sz = 0;
-            n  = 0;
-            continue;
-        }
-        sx += g.x; sy += g.y; sz += g.z;
-        n++;
-    }
-    if (n > 0) {
-        bias_out_dps = {(float)(sx / n), (float)(sy / n), (float)(sz / n)};
-    }
-    return true;
-}
-
 } // namespace imu
 
 #else
@@ -89,6 +52,5 @@ bool capture_gyro_bias(Vec3& bias_out_dps) {
 namespace imu {
     FaultCode begin() { return FaultCode::NONE; }
     bool read(Vec3& a, Vec3& g) { a = {0,0,-1}; g = {0,0,0}; return true; }
-    bool capture_gyro_bias(Vec3& out) { out = {0,0,0}; return true; }
 }
 #endif

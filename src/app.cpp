@@ -82,15 +82,23 @@ void App::transition(State to, uint32_t now_ms) {
 
     switch (to) {
         case State::BOOT:          ui::draw_boot(); break;
-        case State::BIAS_CAL:      last_countdown_sec_ = 10; ui::draw_bias_cal(10); break;
         case State::SET_TARGET:
             in_preset_mode_   = false;
             preset_selection_ = PresetSelection::P12;
             ui::draw_set_target(target_deg_, in_preset_mode_, preset_selection_);
             break;
         case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_); break;
-        case State::ZERO_CAL:      zc_rendered_ = ZeroCalSubstate::DONE; break;
+        case State::ZERO_CAL:
+            // Invalidate the ACTIVE dirty-region cache here rather than relying on
+            // every predecessor screen having cleared it on its way out.
+            ui::clear();
+            zc_rendered_ = ZeroCalSubstate::DONE;
+            break;
         case State::REZERO:
+            // Repaint from scratch: clearing also invalidates the zero-cal
+            // progress throttle cache, so entering REZERO never shows a stale
+            // ACTIVE frame behind the progress screen.
+            ui::clear();
             zc_fsm_.start();
             break;
         case State::ACTIVE: {
@@ -118,9 +126,9 @@ void App::transition(State to, uint32_t now_ms) {
 }
 
 void App::refresh_gyro_bias_(Vec3 bias) {
-    // Per-session gyro-bias refresh from the zero-cal still window. Removes the
-    // turn-on/thermal drift the first-boot-only BIAS_CAL can't track, so the
-    // Mahony filter starts each session with an accurate bias.
+    // Per-session gyro-bias refresh from the zero-cal still window. Tracks
+    // turn-on/thermal drift a once-ever capture couldn't, so the Mahony filter
+    // starts each session with an accurate bias.
     filter_.set_bias(bias);
     settings::save_gyro_bias(bias);
 }
@@ -143,31 +151,7 @@ void App::handle_boot(const Tick& t) {
         // Resume-on-wake is decided in App::begin() (which has the real wake
         // cause). A session left in RTC RAM by a crash/soft-reset must NOT route
         // here to RESUME_PROMPT — begin() did not restore App state in that case,
-        // so resuming would run ACTIVE with zeroed references. Cold boot only
-        // chooses first-boot calibration vs. a fresh target.
-        if (settings::is_first_boot()) {
-            transition(State::BIAS_CAL, t.now_ms);
-        } else {
-            transition(State::SET_TARGET, t.now_ms);
-        }
-    }
-}
-
-void App::handle_bias_cal(const Tick& t) {
-    float mag = std::sqrt(t.accel_g.x*t.accel_g.x + t.accel_g.y*t.accel_g.y + t.accel_g.z*t.accel_g.z);
-    if (std::fabs(mag - 1.0f) > 0.15f) {
-        state_entered_ms_ = t.now_ms; // restart countdown on motion
-    }
-    int remaining = 10 - (int)((t.now_ms - state_entered_ms_) / 1000);
-    if (remaining < 0) remaining = 0;
-    if (remaining != last_countdown_sec_) {
-        last_countdown_sec_ = remaining;
-        ui::draw_bias_cal(remaining);
-    }
-    if (t.now_ms - state_entered_ms_ >= 10000) {
-        // Real bias capture ran in main.cpp before handing off to App; reload it.
-        filter_.set_bias(settings::load_gyro_bias());
-        settings::clear_first_boot();
+        // so resuming would run ACTIVE with zeroed references.
         transition(State::SET_TARGET, t.now_ms);
     }
 }
@@ -253,6 +237,16 @@ void App::handle_zero_cal(const Tick& t) {
     // Currently-moving cue for the progress screen, so a stalled countdown reads
     // as "you're moving it" rather than a frozen device.
     bool moving = zc_fsm_.moving();
+
+    // Keep the idle clock honest so an in-progress capture never dims/sleeps:
+    // button input, device handling (moving), or an actively-progressing capture
+    // all count as activity. Only an untouched static prompt screen idles out.
+    zero_cal::Phase ph = zc_fsm_.phase();
+    if (input == InputEvent::A_SHORT || input == InputEvent::B_SHORT
+        || moving
+        || ph == zero_cal::Phase::WARMUP || ph == zero_cal::Phase::AVERAGING) {
+        last_activity_ms_ = t.now_ms;
+    }
 
     bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
 
@@ -345,6 +339,10 @@ void App::handle_active(const Tick& t) {
     Vec3 la_h = { la.x - la_v*g_now.x, la.y - la_v*g_now.y, la.z - la_v*g_now.z };
     float lat = std::sqrt(la_h.x*la_h.x + la_h.y*la_h.y + la_h.z*la_h.z);
 
+    // Sustained stroke motion counts as activity even when no stroke is counted
+    // (e.g. the user never reaches green), so the device can't deep-sleep mid-use.
+    if (lat >= StrokeFSM::PEAK_LOW_G) last_activity_ms_ = t.now_ms;
+
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
     stroke_fsm_.update(t.now_ms, in_tol, lat);
@@ -426,6 +424,14 @@ void App::handle_rezero(const Tick& t) {
     int ticks_remaining = zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining();
     if (zc_fsm_.phase() == zero_cal::Phase::WARMUP) ticks_remaining += zero_cal::AVERAGING_TICKS;
     ui::draw_zero_cal_progress(ticks_remaining * (int)kLoopTickMs, zc_fsm_.moving());
+
+    // Keep the idle clock honest: an in-progress capture (or a user handling the
+    // device) must never dim/sleep out from under the re-zero.
+    zero_cal::Phase ph = zc_fsm_.phase();
+    if (zc_fsm_.moving()
+        || ph == zero_cal::Phase::WARMUP || ph == zero_cal::Phase::AVERAGING) {
+        last_activity_ms_ = t.now_ms;
+    }
 }
 
 void App::handle_summary(const Tick& t) {
@@ -435,6 +441,11 @@ void App::handle_summary(const Tick& t) {
         session::clear();
         transition(State::SET_TARGET, t.now_ms);
     } else if (t.input == InputEvent::B_SHORT) {
+        // B:Sleep ends the session for real — the user already closed it via
+        // A-long -> SUMMARY, so waking back into RESUME? would be wrong.
+        session::clear();
+        strokes_a_ = strokes_b_ = 0;
+        session_started_ms_ = 0;
         transition(State::SLEEP, t.now_ms);
     }
 }
@@ -472,7 +483,6 @@ void App::on_tick(const Tick& t) {
 
     switch (state_) {
         case State::BOOT:          handle_boot(t); break;
-        case State::BIAS_CAL:      handle_bias_cal(t); break;
         case State::ZERO_CAL:      handle_zero_cal(t); break;
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;

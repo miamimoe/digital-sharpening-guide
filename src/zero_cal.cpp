@@ -67,7 +67,7 @@ void CaptureFSM::update(Vec3 accel_g, Vec3 gyro_dps) {
         Vec3 mean = { accum_.x / n, accum_.y / n, accum_.z / n };
         // Normalize (spec §4 step 6). Averaging unit vectors yields magnitude < 1;
         // downstream consumers (grav_dot_ref polarity in side.cpp) expect a unit
-        // reference. compute_angle normalizes defensively, but make the stored
+        // reference. bevel_angle normalizes defensively, but make the stored
         // zero canonical here.
         float mag = std::sqrt(mean.x*mean.x + mean.y*mean.y + mean.z*mean.z);
         if (mag > 1e-6f) {

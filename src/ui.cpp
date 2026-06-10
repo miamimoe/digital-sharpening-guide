@@ -74,6 +74,7 @@ void clear() {
     M5.Display.fillScreen(COL_BLACK);
     s_last_valid = false;
     s_last_angle_valid = false;
+    s_last_zc_tenths_valid = false;
 }
 
 void draw_boot() {
@@ -81,15 +82,6 @@ void draw_boot() {
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
     draw_centered("v0.1.0",     100, 1, COL_WHITE, COL_BLACK);
-}
-
-void draw_bias_cal(int seconds_remaining) {
-    clear();
-    draw_centered("Hold still",  20, 2, COL_WHITE, COL_BLACK);
-    draw_centered("Calibrating", 44, 2, COL_WHITE, COL_BLACK);
-    char buf[8];
-    std::snprintf(buf, sizeof buf, "%d", seconds_remaining);
-    draw_centered(buf, 78, 4, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -185,7 +177,11 @@ void draw_active(const ActiveView& v) {
         s_last_angle_valid = true;
     }
 
-    if (v.buzzer_flash) {
+    // Draw the buzzer-flash overlay only when it newly appears or the area under
+    // it was just repainted (color change wiped the screen; a counts repaint
+    // covers the right-column sub-label band the overlay overlaps).
+    if (v.buzzer_flash && (!s_last_valid || !s_last.buzzer_flash
+                           || color_changed || counts_changed)) {
         M5.Display.fillRect(30, 96, 180, 30, COL_BLACK);
         const char* msg = v.buzzer_flash_on ? "BUZZER ON" : "BUZZER OFF";
         draw_centered(msg, 102, 2, COL_WHITE, COL_BLACK);
@@ -270,7 +266,12 @@ void draw_zero_cal_progress(int remaining_ms, bool moving) {
 }
 
 void set_backlight(uint8_t percent) {
+    // Brightness is an AXP192 I2C register write on this board (bus shared with
+    // the MPU6886), so same-value writes must be skipped, not repeated every tick.
+    static uint8_t s_last_pct = 255;   // impossible sentinel (range is 0..100)
     if (percent > 100) percent = 100;
+    if (percent == s_last_pct) return;
+    s_last_pct = percent;
     M5.Display.setBrightness((uint8_t)(percent * 255u / 100u));
 }
 
@@ -282,7 +283,6 @@ namespace ui {
     void begin() {}
     void clear() {}
     void draw_boot() {}
-    void draw_bias_cal(int) {}
     void draw_set_target(float, bool, PresetSelection) {}
     void draw_set_tolerance(Tolerance) {}
     void draw_active(const ActiveView&) {}
