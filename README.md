@@ -15,12 +15,12 @@ Plus automatic per-side stroke counting (for balanced bevels), an optional out-o
 > **New here from r/sharpening?** 👋 The fastest path: buy an **M5StickC Plus** + a small magnet (see [What you'll need](#what-youll-need)), then **[flash it in your browser](https://miamimoe.github.io/digital-sharpening-guide/)** — no coding required.
 
 <p align="center">
-  <a href="https://github.com/miamimoe/digital-sharpening-guide/releases/latest">
-    <img src="assets/demo.png" alt="Digital Sharpening Guide mounted on a knife, screen showing the angle-feedback color" width="420">
+  <a href="https://github.com/miamimoe/digital-sharpening-guide/releases/download/v0.1.0/digital-sharpening-guide-demo.mp4">
+    <img src="assets/demo.gif" alt="Live angle feedback while sharpening — the screen stays green while holding the target bevel angle on a whetstone" width="480">
   </a>
 </p>
 
-_📹 Watch the demo clip attached to the [latest release](https://github.com/miamimoe/digital-sharpening-guide/releases/latest). Built in the open after folks on [r/sharpening](https://www.reddit.com/r/sharpening/) asked for the code._
+_▶️ Holding the target angle on a whetstone — screen stays green. [Watch the full clip with sound »](https://github.com/miamimoe/digital-sharpening-guide/releases/download/v0.1.0/digital-sharpening-guide-demo.mp4) · Built in the open after folks on [r/sharpening](https://www.reddit.com/r/sharpening/) asked for the code._
 
 ---
 
