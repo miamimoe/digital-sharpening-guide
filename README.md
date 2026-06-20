@@ -1,6 +1,6 @@
 # Digital Sharpening Guide
 
-**Turn a $20 M5StickC Plus into a live knife-sharpening angle coach.** A magnet sticks the device to the flat of your blade; the screen then fills with color so you can *feel* your angle drift without looking up from the stone:
+**Turn a ~$20 M5StickC Plus into a live knife-sharpening angle coach.** It magnets straight onto the flat of your blade — the stick already has a magnet in its back — and the screen fills with color so you can *feel* your angle drift without looking up from the stone:
 
 - 🟩 **Green** — you're holding the target angle
 - 🟦 **Blue** — too low, raise the spine
@@ -36,26 +36,24 @@ This is a **hobby project at v0.1.0**, shared because people asked for it — no
 
 ## What you'll need
 
-Total cost is roughly **$25–30**. Search terms for AliExpress / Amazon are in the table.
+Basically just the stick — roughly **$20**. The M5StickC Plus already has a magnet in its back, so there's nothing else to buy.
 
 | Item | What to get | Search terms | ~Cost |
 |---|---|---|---|
-| **The computer** | **M5StickC Plus** (ESP32-PICO, 1.14" screen). ⚠️ Get the **"Plus"** — *not* the smaller original M5StickC, and *not* the "Plus2" (different power chip, won't work with this firmware yet). | `M5StickC PLUS ESP32` | $18–25 |
-| **The magnet** | One small neodymium magnet, **~10 mm × 5 mm, N35 or stronger** (disc or block). A multi-pack is fine — you only need one. | `neodymium magnet 10mm 5mm N35` | $1–5 |
-| **The glue** | **5-minute epoxy** (best hold) *or* a strip of **3M VHB double-sided tape** (no mess, removable). | `5 minute epoxy` / `3M VHB tape` | $3–6 |
+| **The device** | **M5StickC Plus** (ESP32-PICO, 1.14" screen). ⚠️ Get the **"Plus"** — *not* the smaller original M5StickC, and *not* the "Plus2" (different power chip, won't work with this firmware yet). | `M5StickC PLUS ESP32` | $18–25 |
 | **USB-C cable** | A **data** cable (not charge-only) to flash it. You probably already have one. | — | — |
 
+> **That's the whole shopping list.** The M5StickC Plus has a magnet built into its back, so it sticks to a steel blade with nothing extra. *If your unit's built-in magnet doesn't grip firmly enough, glue on a small neodymium magnet (~10 × 5 mm N35, a ~$1 add-on) with 5-min epoxy or VHB tape.*
+>
 > **Why the M5StickC Plus specifically?** The firmware talks directly to *this* board's IMU (MPU6886), screen (ST7789V2) and power chip (AXP192). Other M5 sticks use different parts and won't run it correctly. If you already own a Plus, you're set.
 
 ---
 
-## Assembly (2 minutes)
+## Mounting (nothing to build)
 
-1. Decide which face is the "back" — the flat side **opposite the screen**.
-2. Glue the magnet centered on that back face. Epoxy = strongest; VHB tape = clean and removable.
-3. Let it cure (5 min for epoxy). Done — it now snaps onto any steel blade's flat.
+The M5StickC Plus has a magnet in its back, so there's no assembly: just **press it onto the flat of the blade, screen facing you**. No soldering, no glue, no wiring.
 
-That's the whole build. No soldering, no wiring.
+*Optional:* if the built-in magnet doesn't hold firmly on your knife, glue a small neodymium magnet (~10 × 5 mm N35) to the back with 5-minute epoxy or VHB tape.
 
 ---
 
