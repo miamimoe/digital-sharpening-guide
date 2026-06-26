@@ -9,10 +9,10 @@
 Plus automatic per-side stroke counting (for balanced bevels), an optional out-of-tolerance buzzer, and an end-of-session summary.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/hardware-M5StickC%20Plus-blue)
+![Platform](https://img.shields.io/badge/hardware-M5StickC%20Plus%20%7C%20Plus2%20%7C%20S3-blue)
 [![Flash in browser](https://img.shields.io/badge/⚡_flash-in_your_browser-orange)](https://miamimoe.github.io/digital-sharpening-guide/)
 
-> **New here from r/sharpening?** 👋 The fastest path: buy an **M5StickC Plus** + a small magnet (see [What you'll need](#what-youll-need)), then **[flash it in your browser](https://miamimoe.github.io/digital-sharpening-guide/)** — no coding required.
+> **New here from r/sharpening?** 👋 The fastest path: pick a supported device (see [What you'll need](#what-youll-need)), then **[flash it in your browser](https://miamimoe.github.io/digital-sharpening-guide/)** — no coding required.
 
 <p align="center">
   <a href="https://github.com/miamimoe/digital-sharpening-guide/releases/download/v0.1.0/digital-sharpening-guide-demo.mp4">
@@ -26,7 +26,7 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ## ⚠️ Read this first
 
-This is a **hobby project at v0.1.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
+This is a **hobby project at v0.2.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
 - It tells you where your angle is; **you** still do the sharpening. A bad reading won't cut you, but don't trust it blindly on an expensive knife until you've sanity-checked it against a protractor or a marker-on-the-bevel test.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
@@ -40,12 +40,17 @@ Basically just the stick — roughly **$20**. The M5StickC Plus already has a ma
 
 | Item | What to get | Search terms | ~Cost |
 |---|---|---|---|
-| **The device** | **M5StickC Plus** (ESP32-PICO, 1.14" screen). ⚠️ Get the **"Plus"** — *not* the smaller original M5StickC, and *not* the "Plus2" (different power chip, won't work with this firmware yet). | `M5StickC PLUS ESP32` | $18–25 |
+| **The device — pick one** | Three boards are supported. ⚠️ *Not* the original **M5StickC** (non-Plus, smaller ST7735 screen) — that model is not supported. | — | — |
+| M5StickC **Plus** ✅ | Fully validated on real hardware. ESP32-PICO, MPU6886, 1.14" ST7789V2, AXP192, passive buzzer. | `M5StickC Plus ESP32` | $18–25 |
+| M5StickC **Plus2** ⚠️ | Compile-verified + code-reviewed against M5Stack datasheets; needs a community tester — please flash and open an issue. ESP32-PICO-V3-02, MPU6886, same screen, no PMIC, passive buzzer. | `M5StickC Plus2` | $20–28 |
+| **M5StickS3** ⚠️ | Compile-verified + code-reviewed against M5Stack datasheets; needs a community tester — please flash and open an issue. ESP32-S3, BMI270, same screen, M5PM1 PMIC, codec speaker. | `M5StickS3` | $25–35 |
 | **USB-C cable** | A **data** cable (not charge-only) to flash it. You probably already have one. | — | — |
 
-> **That's the whole shopping list.** The M5StickC Plus has a magnet built into its back, so it sticks to a steel blade with nothing extra. *If your unit's built-in magnet doesn't grip firmly enough, glue on a small neodymium magnet (~10 × 5 mm N35, a ~$1 add-on) with 5-min epoxy or VHB tape.*
+> **That's the whole shopping list.** All three supported sticks have a magnet built into their back, so they stick to a steel blade with nothing extra. *If your unit's built-in magnet doesn't grip firmly enough, glue on a small neodymium magnet (~10 × 5 mm N35, a ~$1 add-on) with 5-min epoxy or VHB tape.*
 >
-> **Why the M5StickC Plus specifically?** The firmware talks directly to *this* board's IMU (MPU6886), screen (ST7789V2) and power chip (AXP192). Other M5 sticks use different parts and won't run it correctly. If you already own a Plus, you're set.
+> **Why these three M5Stick models?** From v0.2.0 the firmware is board-guarded at compile time (`src/board.h`, build flag `SG_BOARD_*`): each board gets its own binary, built from one codebase, that adapts to its IMU (MPU6886 on Plus/Plus2, BMI270 on S3), power management (AXP192 on Plus, G4 hold-pin on Plus2, M5PM1 on S3), and status LED pin. If you accidentally flash the wrong binary, the firmware shows a red **WRONG FIRMWARE** screen instead of misbehaving silently. If you already own a Plus, you're set. If you have a Plus2 or S3 — please try it and [report back](https://github.com/miamimoe/digital-sharpening-guide/issues).
+>
+> **Board support status:** M5StickC **Plus** — validated on real hardware. M5StickC **Plus2** and **M5StickS3** — compile-verified and code-reviewed against the M5Stack datasheets, but **not yet confirmed on a physical device** (the maintainer does not own them). All three share one codebase. If you have a Plus2 or S3, please flash it and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) with your results.
 
 ---
 
@@ -62,8 +67,8 @@ The M5StickC Plus has a magnet in its back, so there's no assembly: just **press
 ### Option A — Flash in your browser (recommended, no tools)
 
 1. Open **[miamimoe.github.io/digital-sharpening-guide](https://miamimoe.github.io/digital-sharpening-guide/)** in **desktop Chrome, Edge, or Opera** (Web Serial isn't supported on Safari, Firefox, or phones).
-2. Plug the M5StickC Plus into your computer with a USB-C **data** cable.
-3. Click **⚡ Flash it now**, pick the serial port (often shown as *CP2104 / USB Serial*), and hit **Install**.
+2. Plug your device into your computer with a USB-C **data** cable.
+3. **Select your board** from the device picker (M5StickC Plus / Plus2 / S3), then click **⚡ Flash it now**, pick the serial port (often shown as *CP2104 / USB Serial*), and hit **Install**.
 4. If the device doesn't show up, install the [CP210x USB driver](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers) and reconnect.
 
 A prebuilt binary is also attached to every [GitHub Release](https://github.com/miamimoe/digital-sharpening-guide/releases) if you'd rather flash with `esptool` yourself (offset `0x0`).
@@ -76,8 +81,11 @@ Requires [PlatformIO](https://platformio.org/install/cli):
 git clone https://github.com/miamimoe/digital-sharpening-guide.git
 cd digital-sharpening-guide
 
-pio run -e m5stick-c-plus              # build
-pio run -e m5stick-c-plus -t upload    # flash over USB
+pio run -e m5stick-c-plus              # build for M5StickC Plus
+pio run -e m5stick-c-plus2             # build for M5StickC Plus2
+pio run -e m5stick-s3                  # build for M5StickS3
+
+pio run -e m5stick-c-plus -t upload    # flash over USB (change -e for your board)
 pio device monitor -b 115200           # serial log
 pio test -e native                     # run the desktop unit tests
 ```
@@ -109,7 +117,10 @@ Once flashed, the device walks you through everything on-screen. A full session:
 |---|---|---|
 | **A** (front) | confirm / capture / re-zero | **end session** (→ summary) |
 | **B** (side) | cycle option / switch blade side | **toggle buzzer** |
-| **Power** (left side) | sleep / wake | hold 6 s = full power-off |
+| **Power** (left side) | sleep / wake | hold 6 s = full power-off (AXP192 / Plus only — see note below) |
+
+
+> ⚠️ The "hold 6 s = full power-off" behavior is AXP192-specific and applies to the **M5StickC Plus** only. On the **Plus2** and **S3**, the power button is managed by the board's own power IC through M5Unified; the long-hold power-off behavior may differ slightly.
 
 ---
 
@@ -141,11 +152,11 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
 | Stroke count is off by a few | Expected at v0.1.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 
-## Known limitations (v0.1.0)
+## Known limitations (v0.2.0)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
-- Tested on the original **M5StickC Plus** only.
+- **Board support:** the **M5StickC Plus** is validated on real hardware. The **M5StickC Plus2** and **M5StickS3** are compile-verified and code-reviewed against M5Stack datasheets, but not yet confirmed on a physical device — if you own one, please flash it and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) with results.
 
 ## Contributing
 

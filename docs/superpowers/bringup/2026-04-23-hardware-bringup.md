@@ -130,3 +130,32 @@ Run after the basic IMU/UI/buttons checks pass.
 6. **Mahony singularity sanity** — during the flip from side A to side B, the device physically passes through intermediate orientations, so the Mahony filter sees non-zero cross-product errors and converges normally. This is documented as a synthetic-test concern only (E2E tests use 45° poses to avoid exact-antiparallel singularity), but worth verifying on real hardware: hold the device exactly antiparallel to its previous pose and confirm gravity readout converges within ~3 seconds. If it doesn't, the Mahony `kp` may need tuning, or a brief gyro-magnitude check could force a re-init on perfectly antiparallel transitions. Low priority — physical flips are unlikely to hit this in practice.
 
 If any step fails, capture serial logs (`pio device monitor -b 115200`) and update `Known risks` in `docs/superpowers/specs/2026-04-28-zero-calibration-design.md` with the observed failure mode before adjusting thresholds.
+
+---
+
+## Plus2 / S3 community bring-up checklist
+
+The M5StickC Plus2 and M5StickS3 builds are compile-verified and code-reviewed against the M5Stack datasheets, but the maintainer does not own these boards — **your results are the ground truth**. If you have a Plus2 or S3, please run through this checklist and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) titled **"[Hardware test] Plus2 / S3 bring-up"** with a note on which board you tested, the firmware version, and which items passed or failed.
+
+Flash the correct build for your board via the [browser flasher](https://miamimoe.github.io/digital-sharpening-guide/) (use the device picker to select your board), or build from source:
+
+```bash
+pio run -e m5stick-c-plus2 -t upload   # for M5StickC Plus2
+pio run -e m5stick-s3 -t upload        # for M5StickS3
+```
+
+### First-boot checks
+
+- [ ] Device boots to **SET TARGET** screen — no red **WRONG FIRMWARE** screen is shown
+- [ ] No `IMU FAULT` (E01 / E02 / E03) displayed at any point during boot
+- [ ] Angle colors respond correctly to physical tilt: **green** at target angle, **blue** when spine too low, **red** when spine too high
+- [ ] Buzzer / speaker is audible when out-of-tolerance (with buzzer on) and when toggled via long-press B in ACTIVE — on the S3, this exercises the ES8311 codec speaker via `M5.Speaker.tone`
+- [ ] Power-key short press puts the device to deep sleep (screen off); a second short press wakes it and resumes the in-progress session with counts intact
+- [ ] Magnet grips the flat of a steel knife blade without slipping during a few slow sharpening passes
+
+### Reporting results
+
+Open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) and include:
+- Board model and firmware version (shown in the browser flasher, or via `git describe --tags`)
+- Which checklist items passed / failed
+- Any serial log excerpts for failures (`pio device monitor -b 115200`)
