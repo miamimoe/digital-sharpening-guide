@@ -90,16 +90,26 @@ void update_backlight(uint32_t now_ms, State current,
             M5.Power.Axp192.writeRegister8(0x4D, 0xFF);
             esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
 #endif
+            M5.Power.deepSleep();  // EXT0 armed above → wakes on power key, RTC session preserved
             break;
         case board::Variant::PLUS2:
+            // The Plus2 has no AXP192, but M5Unified sets its internal _wakeupPin to
+            // the power button (GPIO35) for this board, so deepSleep() arms EXT0
+            // itself. Power key wakes it; the RTC-RAM session is preserved.
+            M5.Power.deepSleep();
+            break;
         case board::Variant::S3:
-            // M5Unified arms the board's own wake source inside deepSleep() for
-            // these (Plus2 HOLD/power button; S3 M5PM1 power button). Nothing to
-            // arm by hand, and there is no AXP192 IRQ to clear.
+            // The StickS3 power button is owned by the M5PM1 PMIC (read over I2C),
+            // NOT an RTC-capable GPIO — so deep sleep would arm NO wake source and
+            // the device could never wake (M5Unified 0.2.14 leaves _wakeupPin unset
+            // on this board). Use a clean PMIC power-off instead: a power-key press
+            // re-powers the device. Trade-off vs. Plus/Plus2: the S3 cold-boots on
+            // wake, so the in-progress session in RTC RAM is NOT resumed. That is an
+            // inherent StickS3 limitation, and better than a wake-less deep sleep.
+            M5.Power.powerOff();
             break;
     }
-    M5.Power.deepSleep();  // Display.sleep() + esp_deep_sleep_start(); wake stays armed
-    while (true) {}        // deepSleep() does not return
+    while (true) {}  // neither deepSleep() nor powerOff() returns
 }
 #else
 [[noreturn]] void enter_deep_sleep() {
