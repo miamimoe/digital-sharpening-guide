@@ -15,7 +15,7 @@
 - **No silent regression to the Plus:** the `m5stick-c-plus` env's compiled output must remain functionally identical to v0.1.0. Each guarded Plus branch is the **verbatim** current code.
 - **Keep it lean (YAGNI):** no new deps, no new runtime features. M5Unified is the abstraction layer — prefer its APIs over raw registers/GPIO (the only raw GPIO is the LED).
 - **M5Unified APIs confirmed (Context7, `/m5stack/m5unified`):** `m5::imu_bmi270` and `m5::imu_mpu6886` are valid `imu_t` values; `M5.getBoard()` returns `m5::board_t`; `M5.Power.deepSleep([us])` exists family-wide; `getKeyState()` is AXP192/AXP2101-only.
-- **PlatformIO board ids:** Plus/Plus2 use `board = m5stick-c`; the S3 board id is resolved in Task 2.
+- **PlatformIO board ids:** Plus uses `board = m5stick-c`; Plus2 uses `board = esp32dev` and S3 uses `board = esp32-s3-devkitc-1` — GENERIC bases on purpose, so M5GFX's internal board seed stays `0` and its Plus2/S3 autodetect runs (see Task 2 research findings). A non-generic base would break Plus2 detection.
 - **Commit trailer on every commit:** `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`. Commit type/scope format: `<type>(<scope>): <summary>`. Never `--no-verify`.
 - **Build/test commands:** `pio` is at `/Users/moefayed/.local/bin/pio`.
   - Native tests: `pio test -e native`

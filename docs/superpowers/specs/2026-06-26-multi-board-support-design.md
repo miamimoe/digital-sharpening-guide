@@ -99,12 +99,17 @@ namespace board {
 
 `enter_deep_sleep()` and the wake handling branch on the compiled variant:
 
-- **Plus (AXP192):** unchanged — verbatim current logic (clear AXP IRQ regs 0x44–0x4D, EXT0 on GPIO35).
-- **Plus2 (no PMIC):** ensure the G4 power-latch is held at boot so the device stays on; sleep via
-  `esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0)` + `M5.Power.deepSleep()`. No AXP register I/O.
-- **S3 (M5PM1):** sleep/wake through `M5.Power.deepSleep()` and M5Unified's S3 power-button wake; no
-  raw register or EXT0 pin assumptions. Exact wake wiring confirmed against the installed M5Unified
-  version during implementation.
+- **Plus (AXP192):** unchanged — verbatim current logic (clear AXP IRQ regs 0x44–0x4D, EXT0 on GPIO35),
+  then `M5.Power.deepSleep()`. Session preserved in RTC RAM.
+- **Plus2 (no PMIC):** just `M5.Power.deepSleep()`. M5Unified sets the Plus2's internal `_wakeupPin` to the
+  power button (GPIO35) and the G4 power-latch in its own autodetect/init, so `deepSleep()` arms EXT0
+  itself — no AXP register I/O and no manual latch needed. Session preserved in RTC RAM.
+- **S3 (M5PM1):** `M5.Power.powerOff()`, NOT `deepSleep()`. Verified against the installed M5Unified
+  (0.2.14): the StickS3 leaves `_wakeupPin` unset and its power button is read via the M5PM1 over I²C
+  (not an RTC-capable GPIO), so a deep sleep would arm **no** wake source and the device could never wake.
+  A PMIC power-off cleanly cuts the rail and a power-key press re-powers it. Trade-off: the S3 cold-boots
+  on wake, so the in-progress RTC-RAM session is **not** resumed (an inherent StickS3 limitation,
+  documented for users; far better than a wake-less sleep).
 
 The pure-logic half of `power.cpp` (`config_for`, `check_idle`, `update_backlight`) is unit-tested and
 unchanged.
@@ -139,19 +144,24 @@ the S3 deep-sleep wake source (EXT0 pin vs. M5Unified-managed power-button wake)
 
 | Env | `board` | Key flags | M5Unified |
 |---|---|---|---|
-| `m5stick-c-plus` (existing) | `m5stick-c` | `-D SG_BOARD_PLUS` (+ today's flags) | current pin |
-| `m5stick-c-plus2` (new) | `m5stick-c` | `-D SG_BOARD_PLUS2 -D BOARD_HAS_PSRAM` | bumped |
-| `m5stick-s3` (new) | S3 board (exact id pinned in plan) | `-D SG_BOARD_S3` + octal-PSRAM flags | bumped |
+| `m5stick-c-plus` (existing) | `m5stick-c` | `-D SG_BOARD_PLUS` (+ today's flags) | `^0.2.14` |
+| `m5stick-c-plus2` (new) | `esp32dev` | `-D SG_BOARD_PLUS2` | `^0.2.14` |
+| `m5stick-s3` (new) | `esp32-s3-devkitc-1` | `-D SG_BOARD_S3 -D ARDUINO_USB_CDC_ON_BOOT=1` | `^0.2.14` |
 | `native` (existing) | native | unchanged | n/a |
 | `diag` (existing) | extends plus | unchanged | n/a |
 
-- **M5Unified version:** bump from `^0.2.14` to a release that includes StickS3 board support + the S3
-  `powerOff`/detection fixes. Exact minimum version pinned in the implementation plan after verifying
-  against the M5Unified changelog (Context7 / GitHub releases). The Plus env keeps building against the
-  same (newer) version — verified non-regressing, since M5Unified is backward compatible for the Plus.
-- **S3 board id:** M5Stack does not ship an official PlatformIO board JSON for the StickS3 as of mid-2026.
-  The plan will either point at a generic ESP32-S3 board def (8 MB flash, octal PSRAM) or add a vendored
-  `boards/m5stick-s3.json`. Decided in the first implementation task.
+- **M5Unified version: no bump.** The pinned `^0.2.14` already defines `board_M5StickCPlus`,
+  `board_M5StickCPlus2`, `board_M5StickS3` and autodetects all three at runtime (verified in the installed
+  M5GFX source). All envs stay on `^0.2.14`.
+- **Generic board bases are deliberate (the key constraint).** Plus2 uses `esp32dev` and S3 uses
+  `esp32-s3-devkitc-1` — NOT an `m5stick`/`m5stack-stamps3` base. M5GFX only runs its Plus2/S3 autodetect
+  probes when its internal `board` seed is `0`; a board base that defines an `ARDUINO_M5Stick*` macro
+  seeds a specific board and skips detection — on a Plus2 that leaves the display uninitialised and the
+  `POWER_HOLD_PIN` (G4) unasserted, powering the device straight off. A generic base keeps the seed at `0`
+  so M5Unified detects the real board (by eFuse package version + panel probe) and configures it correctly.
+- **PSRAM:** not required by this firmware (no large buffers), so no `BOARD_HAS_PSRAM` / octal-PSRAM flags
+  on either new env — avoids a memory-type mismatch risk. The S3 only adds `ARDUINO_USB_CDC_ON_BOOT=1`
+  for its native-USB serial monitor.
 
 ## Browser flasher (`docs/`)
 

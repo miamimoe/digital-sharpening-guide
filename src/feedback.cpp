@@ -14,18 +14,24 @@ namespace {
 namespace feedback {
 
 void begin() {
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, HIGH); // HIGH = LED off
+    // The S3 has no discrete status LED (its GPIO19 is USB D-), so skip all LED
+    // wiring there; the LCD color cue is the primary feedback on every board.
+    if (board::has_status_led()) {
+        pinMode(LED_PIN, OUTPUT);
+        digitalWrite(LED_PIN, HIGH); // HIGH = LED off
+    }
     // M5.begin(cfg.internal_spk=true) already started the buzzer; just make sure
     // it's audible. The default volume is low and easy to miss on this buzzer.
     M5.Speaker.setVolume(BUZZER_VOLUME);
 }
 
 void set_color(ColorState c) {
+    if (!board::has_status_led()) return;
     digitalWrite(LED_PIN, (c == ColorState::RED) ? LOW : HIGH);
 }
 
 void fault_led() {
+    if (!board::has_status_led()) return;
     digitalWrite(LED_PIN, LOW); // solid on
 }
 

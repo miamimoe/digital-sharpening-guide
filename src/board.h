@@ -26,14 +26,23 @@ constexpr Variant variant() {
 #endif
 }
 
-// Red status LED GPIO (active LOW). Plus routes it to GPIO10; Plus2 and S3 to GPIO19.
+// Red status LED GPIO (active LOW). Plus routes it to GPIO10, Plus2 to GPIO19.
+// The StickS3 has no user red LED, and its GPIO19 is the USB D- line — driving
+// it would clobber USB-CDC — so the S3 reports -1 (no status LED). Callers must
+// check has_status_led() before using this. The full-screen LCD color remains
+// the primary feedback on every board; the LED is only a secondary cue.
 constexpr int led_pin() {
 #if defined(SG_BOARD_PLUS)
     return 10;
-#else
+#elif defined(SG_BOARD_PLUS2)
     return 19;
+#else
+    return -1;
 #endif
 }
+
+// Whether this board has a usable discrete status LED (false on the S3).
+constexpr bool has_status_led() { return led_pin() >= 0; }
 
 // True only on the original Plus, whose PMIC is the AXP192 (I2C). The Plus2 has
 // no PMIC (HOLD-pin power latch); the S3 uses the M5PM1. Used to gate AXP-only code.
