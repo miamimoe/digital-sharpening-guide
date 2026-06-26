@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Flash the Digital Sharpening Guide</title>
-  <meta name="description" content="Flash the Digital Sharpening Guide firmware to your M5StickC Plus right from your browser — no toolchain, no install." />
+  <meta name="description" content="Flash the Digital Sharpening Guide firmware to your M5StickC Plus, Plus2, or M5StickS3 right from your browser — no toolchain, no install." />
   <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
   <style>
     :root {
@@ -61,31 +61,55 @@
   <div class="wrap">
     <div class="lights"><span class="b"></span><span class="g"></span><span class="r"></span></div>
     <h1>Digital Sharpening Guide</h1>
-    <p class="sub">Flash the firmware to your M5StickC&nbsp;Plus straight from this page. No PlatformIO, no command line — just a USB-C cable and a Chrome-based browser on a computer.</p>
+    <p class="sub">Flash the firmware to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page. No PlatformIO, no command line — just a USB-C cable and a Chrome-based browser on a computer.</p>
 
     <div class="panel">
-      <h2>Before you click</h2>
+      <h2>1 · Pick your device</h2>
+      <select id="device" aria-label="Choose your device" style="width:100%;padding:11px 12px;border-radius:8px;background:#0a0c0f;color:var(--text);border:1px solid var(--line);font-size:1rem;">
+        <option value="manifest-plus.json">M5StickC Plus</option>
+        <option value="manifest-plus2.json">M5StickC Plus2</option>
+        <option value="manifest-s3.json">M5StickS3</option>
+      </select>
+      <p class="note" id="device-note" style="margin:12px 0 0;text-align:left;">
+        The <strong>M5StickC&nbsp;Plus</strong> build is validated on real hardware. The
+        <strong>Plus2</strong> and <strong>S3</strong> builds are compile-verified and code-reviewed but
+        <strong>not yet confirmed on a physical device</strong> — if you flash one, please
+        <a href="https://github.com/miamimoe/digital-sharpening-guide/issues" target="_blank" rel="noopener">open an issue</a> with how it went.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>2 · Before you click</h2>
       <ol>
         <li>Use <strong>Chrome, Edge, or Opera on a desktop/laptop</strong> (Web Serial isn't supported on Safari, Firefox, or phones).</li>
-        <li>Plug the M5StickC&nbsp;Plus into your computer with a <strong>USB-C data cable</strong> (some cables are charge-only — if nothing connects, try another cable).</li>
-        <li>If your computer doesn't see the device, install the <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB driver</a> and reconnect.</li>
+        <li>Plug the device into your computer with a <strong>USB-C data cable</strong> (some cables are charge-only — if nothing connects, try another cable).</li>
+        <li>If your computer doesn't see the device, install the <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB driver</a> and reconnect. (The M5StickS3 connects over native USB and usually needs no driver.)</li>
       </ol>
     </div>
 
     <div class="cta">
-      <esp-web-install-button manifest="manifest.json">
+      <esp-web-install-button id="installer" manifest="manifest-plus.json">
         <button slot="activate" class="btn-fallback">⚡ Flash it now</button>
         <span slot="unsupported" class="unsupported">Your browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
         <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) connection.</span>
       </esp-web-install-button>
-      <p class="note" style="margin-top:16px;">When the dialog opens, pick the serial port (often labelled <em>CP2104</em> / <em>USB Serial</em>) and choose <strong>Install</strong>.</p>
+      <p class="note" style="margin-top:16px;">When the dialog opens, pick the serial port (often labelled <em>CP2104</em> / <em>USB Serial</em> on a Plus/Plus2, or <em>USB JTAG/serial</em> on an S3) and choose <strong>Install</strong>.</p>
     </div>
 
+    <script>
+      // Point the installer at the manifest for the selected device.
+      var deviceSelect = document.getElementById('device');
+      var installer = document.getElementById('installer');
+      deviceSelect.addEventListener('change', function () {
+        installer.setAttribute('manifest', deviceSelect.value);
+      });
+    </script>
+
     <div class="panel">
-      <h2>After flashing</h2>
+      <h2>3 · After flashing</h2>
       <ol>
-        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash, then a <strong>SET TARGET</strong> screen.</li>
-        <li>Stick it onto your knife's flat (the M5StickC Plus has a magnet in its back) and follow the on-screen calibration.</li>
+        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash, then a <strong>SET TARGET</strong> screen. (If you see a red <strong>WRONG FIRMWARE</strong> screen, you flashed the build for a different stick — go back and pick the matching device.)</li>
+        <li>Stick it onto your knife's flat (these sticks have a magnet in the back) and follow the on-screen calibration.</li>
         <li>Full usage walkthrough &amp; controls are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
       </ol>
     </div>
