@@ -4,6 +4,7 @@
 #include <esp_sleep.h>
 
 #include "app.h"
+#include "board.h"
 #include "imu.h"
 #include "input.h"
 #include "settings.h"
@@ -29,10 +30,41 @@ void setup() {
     M5.begin(cfg);
     setCpuFrequencyMhz(80);  // 80 MHz is ample for 50 Hz loop; saves ~25 mA
 
-    // Consume any pending AXP192 power-key press (reads + clears the IRQ flag).
-    // The press that woke us from deep sleep would otherwise surface as a
-    // BtnPWR click on the first M5.update() and immediately put us back to sleep.
-    M5.Power.getKeyState();
+    // Safety: refuse to run if this binary was flashed onto a different board than
+    // it was built for (e.g. the S3 build onto a Plus2). Each board has a distinct
+    // sleep/wake + IMU path, so running the wrong one would misbehave silently.
+    {
+        m5::board_t expected;
+        switch (board::variant()) {
+            case board::Variant::PLUS:  expected = m5::board_t::board_M5StickCPlus;  break;
+            case board::Variant::PLUS2: expected = m5::board_t::board_M5StickCPlus2; break;
+            case board::Variant::S3:    expected = m5::board_t::board_M5StickS3;     break;
+        }
+        if (M5.getBoard() != expected) {
+            M5.Display.setRotation(1);
+            M5.Display.fillScreen(TFT_RED);
+            M5.Display.setTextColor(TFT_WHITE);
+            M5.Display.setTextSize(2);
+            M5.Display.setCursor(6, 10);
+            M5.Display.print("WRONG FIRMWARE");
+            M5.Display.setTextSize(1);
+            M5.Display.setCursor(6, 40);
+            M5.Display.print("for this device.");
+            M5.Display.setCursor(6, 56);
+            M5.Display.print("Flash the build that");
+            M5.Display.setCursor(6, 68);
+            M5.Display.print("matches your stick.");
+            while (true) { delay(1000); }
+        }
+    }
+
+    // Consume any pending power-key press that woke us, so it doesn't surface as a
+    // BtnPWR click on the first M5.update() and bounce us straight back to sleep.
+    // getKeyState() is AXP192/AXP2101-only; the Plus2/S3 power buttons are handled
+    // through M5.BtnPWR, so only the AXP192 Plus needs this.
+    if (board::has_axp192()) {
+        M5.Power.getKeyState();
+    }
 
     ui::begin();
     feedback::begin();
