@@ -150,7 +150,8 @@ pio run -e m5stick-s3 -t upload        # for M5StickS3
 - [ ] No `IMU FAULT` (E01 / E02 / E03) displayed at any point during boot
 - [ ] Angle colors respond correctly to physical tilt: **green** at target angle, **blue** when spine too low, **red** when spine too high
 - [ ] Buzzer / speaker is audible when out-of-tolerance (with buzzer on) and when toggled via long-press B in ACTIVE — on the S3, this exercises the ES8311 codec speaker via `M5.Speaker.tone`
-- [ ] Power-key short press puts the device to deep sleep (screen off); a second short press wakes it and resumes the in-progress session with counts intact
+- [ ] **Plus2** — power-key short press puts the device to deep sleep (screen off); a second short press wakes it and **resumes the in-progress session** with counts intact
+- [ ] **S3** — power-key (or the SLEEP action / idle timeout) fully powers the device **off** (M5PM1 has no GPIO wake source, so it does not deep-sleep); a power-key press then turns it back **on with a fresh boot** — the in-progress session is *not* resumed on the S3 (expected). The critical check: the device must reliably power back on (never become unwakeable)
 - [ ] Magnet grips the flat of a steel knife blade without slipping during a few slow sharpening passes
 
 ### Reporting results

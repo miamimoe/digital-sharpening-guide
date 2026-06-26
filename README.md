@@ -129,7 +129,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 - **Edge-axis bevel measurement.** The two-step zero calibration captures both a flat reference *and* the cutting-edge hinge axis. The bevel angle is measured as rotation *about that axis*, so tip-to-heel skew doesn't inflate the reading and a single calibration serves both faces of the blade.
 - **Mahony AHRS filter** fuses gyro + accelerometer at 50 Hz, with per-session gyro-bias capture and a snap-to-raw recovery when the device is verifiably still.
 - **Motion-based stroke counting.** Passes are detected as horizontal linear-acceleration peaks (with hysteresis + a refractory interval) while you're on-angle — not from angle-dwell timing.
-- **Battery-aware.** Deep sleep on idle with the session preserved in RTC RAM (wake resumes where you left off), screen dimming, an 80 MHz CPU clock, and a one-click sleep/wake power key. Figure on roughly an hour or two of continuous use on the small ~120 mAh cell (untuned — your mileage will vary).
+- **Battery-aware.** Idle sleep, screen dimming, an 80 MHz CPU clock, and a one-click power key. On the **Plus/Plus2** this is a true deep sleep with the session preserved in RTC RAM, so waking resumes where you left off. On the **M5StickS3** the power button is owned by the M5PM1 PMIC (not a wake-capable GPIO), so the device fully powers off instead — a power-key press turns it back on with a fresh boot (the in-progress session isn't resumed on the S3). Figure on roughly an hour or two of continuous use on the small cell (untuned — your mileage will vary).
 
 More detail lives in [`docs/`](docs/) — the design spec, implementation plan, and hardware bring-up checklist.
 
