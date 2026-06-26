@@ -2,6 +2,7 @@
 
 #ifndef UNIT_TEST
 #include <M5Unified.h>
+#include "board.h"
 
 namespace imu {
 
@@ -20,11 +21,15 @@ FaultCode begin() {
     }
     if (!ok) return FaultCode::E02_SELF_TEST_FAILED;
 
-    // WHO_AM_I mismatch indicator: M5Unified's auto-detected type should be mpu6886
-    // on an M5StickC Plus. Any other value means either a different board was
-    // detected, or the documented AXP192/MPU6886 I²C conflict kept the IMU chip
-    // from answering the type query.
-    if (M5.Imu.getType() != m5::imu_mpu6886) {
+    // The expected auto-detected IMU is board-specific: MPU6886 on Plus/Plus2,
+    // BMI270 on the S3. A mismatch means a different board was detected, the wrong
+    // firmware was flashed, or (Plus only) the AXP192/MPU6886 I²C conflict kept the
+    // IMU from answering the type query.
+    m5::imu_t got = M5.Imu.getType();
+    bool type_ok = (board::variant() == board::Variant::S3)
+                       ? (got == m5::imu_bmi270)
+                       : (got == m5::imu_mpu6886);
+    if (!type_ok) {
         return FaultCode::E03_WHO_AM_I_MISMATCH;
     }
     return FaultCode::NONE;
