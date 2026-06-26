@@ -17,3 +17,6 @@ CLAUDE.md
 *.bin
 # ...except the prebuilt firmware served by the browser flasher (GitHub Pages)
 !docs/firmware/*.bin
+
+# internal SDD scratch (progress ledger, review packages) — never publish
+.superpowers/
