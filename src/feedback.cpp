@@ -1,10 +1,11 @@
 #include "feedback.h"
+#include "board.h"
 
 #ifndef UNIT_TEST
 #include <M5Unified.h>
 
 namespace {
-    constexpr int      LED_PIN        = 10;     // M5StickC Plus red LED GPIO (active LOW)
+    constexpr int      LED_PIN        = board::led_pin();  // red LED GPIO by board (active LOW)
     constexpr float    BEEP_HZ        = 2000.0f;
     constexpr uint32_t BEEP_MS        = 150;    // long enough to clearly hear on the GPIO2 buzzer
     constexpr uint8_t  BUZZER_VOLUME  = 255;    // max — the passive buzzer can't be overdriven
