@@ -152,18 +152,34 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `platformio.ini`
-- Possibly create: `boards/m5stick-s3.json` (only if no suitable stock S3 board exists)
 
 **Interfaces:**
 - Produces: build envs `m5stick-c-plus2` and `m5stick-s3` that compile the current source under `SG_BOARD_PLUS2` / `SG_BOARD_S3`.
 
-- [ ] **Step 1: Verify M5Unified version + S3 board id (current-docs research)**
+**RESEARCH FINDINGS (verified against installed M5Unified 0.2.14 / M5GFX source — these supersede earlier assumptions):**
 
-Use Context7 (`/m5stack/m5unified`) and the PlatformIO registry / `pio boards m5stick` to determine:
-- the minimum **M5Unified** version that includes StickS3 board support (newer than `0.2.14`);
-- the exact `m5::board_t` constants for Plus2 and S3 (expected `board_M5StickCPlus2`, `board_M5StickS3`) — record them for Task 5;
-- whether a stock PlatformIO S3 board (e.g. an `esp32-s3` devkit def with 8 MB flash / octal PSRAM) is acceptable, or a vendored `boards/m5stick-s3.json` is needed.
-  Run: `/Users/moefayed/.local/bin/pio boards 2>/dev/null | grep -i s3 | head -40`
+- **No M5Unified bump needed.** The pinned `0.2.14` already defines `board_M5StickCPlus`,
+  `board_M5StickCPlus2`, `board_M5StickS3` and autodetects all three at runtime. Keep `^0.2.14` on
+  every env.
+- **CRITICAL — both new envs must use a GENERIC board base (no `ARDUINO_M5Stick*` macro).** M5GFX runs
+  its Plus2/S3 autodetect probes only when its internal `board` seed is `0` (unknown). A board base like
+  `m5stick-c` defines `-DARDUINO_M5Stick_C`, which seeds `board = board_M5StickC` and makes the Plus2
+  branch (`board == 0 || board == board_M5StickCPlus2`) FALSE — so on a real Plus2 the display never
+  inits **and `POWER_HOLD_PIN` G4 is never asserted, so the device powers straight off.** Using a generic
+  base keeps the seed at `0` so autodetect (by eFuse pkg-version + panel probe) runs correctly and the
+  library asserts the Plus2 power-hold itself.
+- **Board bases:** Plus2 → `esp32dev` (generic ESP32, board stays 0). S3 → `esp32-s3-devkitc-1`
+  (generic ESP32-S3, 8 MB, board stays 0). PSRAM is NOT required by this firmware — do not add octal-PSRAM
+  flags (avoids a memory-type mismatch risk); the S3 just needs USB-CDC for the serial monitor.
+- **Confirmed `m5::board_t` constants for Task 5:** `board_M5StickCPlus`, `board_M5StickCPlus2`,
+  `board_M5StickS3`.
+
+- [ ] **Step 1: Confirm the S3 toolchain builds at all (smoke test)**
+
+The S3 is a different silicon target; confirm the platform/toolchain is present before wiring the env.
+Run: `/Users/moefayed/.local/bin/pio boards 2>/dev/null | grep -iE "esp32-s3-devkitc-1|esp32dev"`
+Expected: both board ids listed. (If the S3 platform packages need downloading, the first S3 build will
+fetch them — allow time.)
 
 - [ ] **Step 2: Add the Plus2 env**
 
@@ -171,47 +187,44 @@ Append to `platformio.ini`:
 ```ini
 [env:m5stick-c-plus2]
 platform = espressif32@^6.5.0
-board = m5stick-c
+board = esp32dev            ; generic ESP32 base — keeps M5GFX board seed at 0 so Plus2 autodetects
 framework = arduino
 upload_speed = 1500000
 monitor_speed = 115200
 build_flags =
     -D CORE_DEBUG_LEVEL=1
     -D SG_BOARD_PLUS2
-    -D BOARD_HAS_PSRAM
     -std=gnu++17
     -Wall -Wswitch-enum
     -ffile-prefix-map=${platformio.core_dir}=pio
     -fmacro-prefix-map=${platformio.core_dir}=pio
 lib_deps =
-    m5stack/M5Unified@^0.2.14   ; bump to the StickS3-capable version found in Step 1
+    m5stack/M5Unified@^0.2.14
 ```
 
 - [ ] **Step 3: Add the S3 env**
 
-Append to `platformio.ini` (board id / PSRAM flags filled from Step 1):
+Append to `platformio.ini`:
 ```ini
 [env:m5stick-s3]
-platform = espressif32@^6.7.0   ; S3 needs a platform rev with S3-PICO support; pin from Step 1
-board = <s3-board-id-from-step-1>
+platform = espressif32@^6.5.0
+board = esp32-s3-devkitc-1  ; generic ESP32-S3 base — keeps M5GFX board seed at 0 so StickS3 autodetects
 framework = arduino
 upload_speed = 1500000
 monitor_speed = 115200
 build_flags =
     -D CORE_DEBUG_LEVEL=1
     -D SG_BOARD_S3
-    -D BOARD_HAS_PSRAM
+    -D ARDUINO_USB_CDC_ON_BOOT=1   ; StickS3 serial monitor runs over native USB-CDC
     -std=gnu++17
     -Wall -Wswitch-enum
     -ffile-prefix-map=${platformio.core_dir}=pio
     -fmacro-prefix-map=${platformio.core_dir}=pio
 lib_deps =
-    m5stack/M5Unified@^0.2.14   ; same StickS3-capable version as Plus2
+    m5stack/M5Unified@^0.2.14
 ```
 
-- [ ] **Step 4: Bump the Plus env's M5Unified to match**
-
-Set the `m5stack/M5Unified` version in `[env:m5stick-c-plus]` to the same StickS3-capable version, so all three envs share one library version.
+- [ ] **Step 4: (removed — no M5Unified bump needed; all envs stay on `^0.2.14`)**
 
 - [ ] **Step 5: Build all three firmware envs**
 
