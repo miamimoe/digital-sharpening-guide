@@ -24,6 +24,16 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
+## What's new in v0.2.1
+
+- **Two more angle presets: 25° and 28°** — the common sharpen/deburr pair for Chinese chef knives. `B` now cycles **12° / 15° / 17° / 20° / 22° / 25° / 28° / CANCEL**. Requested by a user sharpening on an S3, where the presets are the quickest way in.
+- Boot splash now shows the real firmware version (it had been stuck reading `v0.1.0`).
+- Build dependencies pinned to exact versions so a given release rebuilds byte-for-byte instead of drifting with upstream.
+
+[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
+
+---
+
 ## ⚠️ Read this first
 
 This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
@@ -150,7 +160,7 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Screen stuck on **"KEEP STILL"** during calibration | Set the device down on the bench for a second so it can capture — or tap **B** to force the capture. |
 | Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
-| Stroke count is off by a few | Expected at v0.1.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Stroke count is off by a few | Expected at v0.2.1 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 
 ## Known limitations (v0.2.1)
 
