@@ -161,6 +161,8 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - **No M5Unified bump needed.** The pinned `0.2.14` already defines `board_M5StickCPlus`,
   `board_M5StickCPlus2`, `board_M5StickS3` and autodetects all three at runtime. Keep `^0.2.14` on
   every env.
+  *(Superseded at v0.2.1: every env now carries the exact pin `0.2.20` rather than the range `^0.2.14`
+  — same feature floor, pinned for build reproducibility. See the design spec for the rationale.)*
 - **CRITICAL — both new envs must use a GENERIC board base (no `ARDUINO_M5Stick*` macro).** M5GFX runs
   its Plus2/S3 autodetect probes only when its internal `board` seed is `0` (unknown). A board base like
   `m5stick-c` defines `-DARDUINO_M5Stick_C`, which seeds `board = board_M5StickC` and makes the Plus2
