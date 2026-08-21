@@ -52,6 +52,8 @@ enum class PresetSelection : uint8_t {
     P17,
     P20,
     P22,
+    P25,
+    P28,
     CANCEL
 };
 
@@ -80,6 +82,8 @@ inline float preset_degrees(PresetSelection p) {
         case PresetSelection::P17:    return 17.0f;
         case PresetSelection::P20:    return 20.0f;
         case PresetSelection::P22:    return 22.0f;
+        case PresetSelection::P25:    return 25.0f;
+        case PresetSelection::P28:    return 28.0f;
         case PresetSelection::CANCEL: return 0.0f;
     }
     __builtin_unreachable();

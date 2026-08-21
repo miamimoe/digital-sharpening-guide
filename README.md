@@ -24,9 +24,19 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
+## What's new in v0.2.1
+
+- **Two more angle presets: 25° and 28°** — the common sharpen/deburr pair for Chinese chef knives. `B` now cycles **12° / 15° / 17° / 20° / 22° / 25° / 28° / CANCEL**. Requested by a user sharpening on an S3, where the presets are the quickest way in.
+- Boot splash now shows the real firmware version (it had been stuck reading `v0.1.0`).
+- Build dependencies pinned to exact versions so a given release rebuilds byte-for-byte instead of drifting with upstream.
+
+[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
+
+---
+
 ## ⚠️ Read this first
 
-This is a **hobby project at v0.2.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
+This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
 - It tells you where your angle is; **you** still do the sharpening. A bad reading won't cut you, but don't trust it blindly on an expensive knife until you've sanity-checked it against a protractor or a marker-on-the-bevel test.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
@@ -101,7 +111,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 1. **Power on.** You'll see a `SHARPENING GUIDE` splash, then `SET TARGET`.
 2. **Set your target angle.** Either:
    - hold the device at the angle you want and press **A** to capture it, **or**
-   - press **B** to cycle the presets (12° / 15° / 17° / 20° / 22°) and press **A** to pick one.
+   - press **B** to cycle the presets (12° / 15° / 17° / 20° / 22° / 25° / 28°) and press **A** to pick one.
 3. **Set tolerance.** Press **B** to cycle `TIGHT ±2°` / `NORMAL ±3°` / `EASY ±5°`, then **A** to confirm. (Start with NORMAL or EASY.)
 4. **Zero-calibrate (2 quick steps).** This is what makes it angle-accurate regardless of how the device is rotated on the blade:
    - **Step 1/2 — "Lay flat on stone":** rest the blade flat on your stone, press **A**, hold still for the countdown.
@@ -150,9 +160,9 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Screen stuck on **"KEEP STILL"** during calibration | Set the device down on the bench for a second so it can capture — or tap **B** to force the capture. |
 | Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
-| Stroke count is off by a few | Expected at v0.1.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Stroke count is off by a few | Expected at v0.2.1 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 
-## Known limitations (v0.2.0)
+## Known limitations (v0.2.1)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.

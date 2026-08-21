@@ -159,12 +159,31 @@ void test_set_target_b_enters_preset_mode_and_cycles(void) {
     TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
 }
 
+void test_preset_cycles_to_25_and_28(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    // B enters preset mode on 12; each further B steps 15/17/20/22/25/28.
+    for (int i = 0; i < 6; i++) advance(a, t, 100, InputEvent::B_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_FLOAT(25.0f, a.target_deg());
+
+    App b;
+    b.begin(false);
+    t = 0;
+    advance(b, t, 2100);
+    for (int i = 0; i < 7; i++) advance(b, t, 100, InputEvent::B_SHORT);
+    advance(b, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_FLOAT(28.0f, b.target_deg());
+}
+
 void test_preset_cancel_returns_to_live_capture(void) {
     App a;
     a.begin(false);
     uint32_t t = 0;
     advance(a, t, 2100);
-    for (int i = 0; i < 6; i++) advance(a, t, 100, InputEvent::B_SHORT);
+    for (int i = 0; i < 8; i++) advance(a, t, 100, InputEvent::B_SHORT);
     advance(a, t, 100, InputEvent::A_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
     advance(a, t, 100, InputEvent::A_SHORT);
@@ -370,6 +389,7 @@ int main(int, char**) {
     RUN_TEST(test_resume_prompt_times_out_to_set_target);
     RUN_TEST(test_set_target_a_captures_and_advances);
     RUN_TEST(test_set_target_b_enters_preset_mode_and_cycles);
+    RUN_TEST(test_preset_cycles_to_25_and_28);
     RUN_TEST(test_preset_cancel_returns_to_live_capture);
     RUN_TEST(test_tolerance_a_confirms_and_advances);
     RUN_TEST(test_active_long_a_goes_to_summary);

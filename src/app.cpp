@@ -24,7 +24,9 @@ static PresetSelection next_preset(PresetSelection p) {
         case PresetSelection::P15:    return PresetSelection::P17;
         case PresetSelection::P17:    return PresetSelection::P20;
         case PresetSelection::P20:    return PresetSelection::P22;
-        case PresetSelection::P22:    return PresetSelection::CANCEL;
+        case PresetSelection::P22:    return PresetSelection::P25;
+        case PresetSelection::P25:    return PresetSelection::P28;
+        case PresetSelection::P28:    return PresetSelection::CANCEL;
         case PresetSelection::CANCEL: return PresetSelection::P12;
     }
     __builtin_unreachable();

@@ -144,15 +144,21 @@ the S3 deep-sleep wake source (EXT0 pin vs. M5Unified-managed power-button wake)
 
 | Env | `board` | Key flags | M5Unified |
 |---|---|---|---|
-| `m5stick-c-plus` (existing) | `m5stick-c` | `-D SG_BOARD_PLUS` (+ today's flags) | `^0.2.14` |
-| `m5stick-c-plus2` (new) | `esp32dev` | `-D SG_BOARD_PLUS2` | `^0.2.14` |
-| `m5stick-s3` (new) | `esp32-s3-devkitc-1` | `-D SG_BOARD_S3 -D ARDUINO_USB_CDC_ON_BOOT=1` | `^0.2.14` |
+| `m5stick-c-plus` (existing) | `m5stick-c` | `-D SG_BOARD_PLUS` (+ today's flags) | `0.2.20` |
+| `m5stick-c-plus2` (new) | `esp32dev` | `-D SG_BOARD_PLUS2` | `0.2.20` |
+| `m5stick-s3` (new) | `esp32-s3-devkitc-1` | `-D SG_BOARD_S3 -D ARDUINO_USB_CDC_ON_BOOT=1` | `0.2.20` |
 | `native` (existing) | native | unchanged | n/a |
 | `diag` (existing) | extends plus | unchanged | n/a |
 
-- **M5Unified version: no bump.** The pinned `^0.2.14` already defines `board_M5StickCPlus`,
+- **M5Unified version: no *feature* bump needed.** 0.2.14 already defines `board_M5StickCPlus`,
   `board_M5StickCPlus2`, `board_M5StickS3` and autodetects all three at runtime (verified in the installed
-  M5GFX source). All envs stay on `^0.2.14`.
+  M5GFX source), so nothing in this design depends on a later release.
+  **Superseded at v0.2.1 (2026-08-21):** the constraint changed from the range `^0.2.14` to the exact pin
+  `0.2.20` — same feature floor, but the caret had silently drifted the published build. Rebuilding an
+  unmodified `main` produced a binary ~55 KB smaller than the released v0.2.0 `.bin`, because `^0.2.14`
+  had resolved forward to M5Unified 0.2.20 / M5GFX 0.2.27 (and `espressif32@^6.5.0` to 6.13.0). Exact
+  pins make a released binary reproducible; bumps are now deliberate and reviewable. All envs stay on
+  `0.2.20`.
 - **Generic board bases are deliberate (the key constraint).** Plus2 uses `esp32dev` and S3 uses
   `esp32-s3-devkitc-1` — NOT an `m5stick`/`m5stack-stamps3` base. M5GFX only runs its Plus2/S3 autodetect
   probes when its internal `board` seed is `0`; a board base that defines an `ARDUINO_M5Stick*` macro
