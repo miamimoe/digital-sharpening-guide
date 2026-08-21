@@ -101,7 +101,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 1. **Power on.** You'll see a `SHARPENING GUIDE` splash, then `SET TARGET`.
 2. **Set your target angle.** Either:
    - hold the device at the angle you want and press **A** to capture it, **or**
-   - press **B** to cycle the presets (12° / 15° / 17° / 20° / 22°) and press **A** to pick one.
+   - press **B** to cycle the presets (12° / 15° / 17° / 20° / 22° / 25° / 28°) and press **A** to pick one.
 3. **Set tolerance.** Press **B** to cycle `TIGHT ±2°` / `NORMAL ±3°` / `EASY ±5°`, then **A** to confirm. (Start with NORMAL or EASY.)
 4. **Zero-calibrate (2 quick steps).** This is what makes it angle-accurate regardless of how the device is rotated on the blade:
    - **Step 1/2 — "Lay flat on stone":** rest the blade flat on your stone, press **A**, hold still for the countdown.
