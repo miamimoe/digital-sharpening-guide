@@ -26,7 +26,7 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ## ⚠️ Read this first
 
-This is a **hobby project at v0.2.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
+This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
 - It tells you where your angle is; **you** still do the sharpening. A bad reading won't cut you, but don't trust it blindly on an expensive knife until you've sanity-checked it against a protractor or a marker-on-the-bevel test.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
@@ -152,7 +152,7 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
 | Stroke count is off by a few | Expected at v0.1.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 
-## Known limitations (v0.2.0)
+## Known limitations (v0.2.1)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
