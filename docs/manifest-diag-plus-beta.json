@@ -1,13 +1,13 @@
 {
   "name": "Digital Sharpening Guide Diagnostic (Plus) (BETA)",
-  "version": "0.3.0-beta.2",
+  "version": "0.3.0-beta.3",
   "funding_url": "https://github.com/miamimoe/digital-sharpening-guide",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
-        { "path": "firmware/beta/sharpening-guide-diag-plus-v0.3.0-beta.2.bin", "offset": 0 }
+        { "path": "firmware/beta/sharpening-guide-diag-plus-v0.3.0-beta.3.bin", "offset": 0 }
       ]
     }
   ]
