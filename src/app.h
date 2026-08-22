@@ -91,6 +91,10 @@ private:
 
     // Consecutive ticks the device has looked still, for the bias refresh.
     uint16_t         bias_still_ticks_     = 0;
+    // Accel direction at still-window start (fixed, never slides) and the bias
+    // to revert to if the window turns out to be a slow rotation.
+    Vec3             bias_anchor_          = {0.0f, 0.0f, 0.0f};
+    Vec3             bias_at_window_start_ = {0.0f, 0.0f, 0.0f};
 
     // Last whole-second value rendered for a countdown screen (RESUME_PROMPT)
     // so it repaints once per second instead of every tick.

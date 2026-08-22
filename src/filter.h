@@ -89,6 +89,11 @@ namespace mahony {
     constexpr float BIAS_STILL_ACCEL_TOL  = 0.05f;  // |a| this close to 1g = not accelerating
     constexpr uint16_t BIAS_STILL_TICKS   = 25;     // 0.5 s at 50 Hz before trusting it
     constexpr float BIAS_EMA_ALPHA        = 0.02f;  // slow: ~35 still-ticks per time constant
+    // Max accel-direction drift from the window-start anchor before the window
+    // is judged a slow rotation rather than rest (0.02 g ~ 1.15 deg). Stricter
+    // than zero_cal's hand-held gate on purpose: bias refresh should fire on a
+    // device at rest on the stone, not one merely held steadily.
+    constexpr float BIAS_STILL_DRIFT_TOL_G = 0.02f;
 
     // True when the filter's gravity estimate has drifted from a trustworthy raw
     // gravity reading while the device is held still — the cue to nudge_to_gravity().

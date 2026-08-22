@@ -53,10 +53,44 @@ void App::refresh_bias_if_still_(Vec3 accel_g, Vec3 gyro_dps) {
         bias_still_ticks_ = 0;
         return;
     }
-    if (bias_still_ticks_ < mahony::BIAS_STILL_TICKS) {
-        ++bias_still_ticks_;
+
+    // Rate and magnitude alone cannot catch a rotation slower than the gyro
+    // threshold — a sub-2 dps tilt keeps |a| at 1 g and would be learned as
+    // bias. So the accel direction is ANCHORED at window start and never slides:
+    // a genuine rest stays within noise of the anchor forever, while any slow
+    // tilt walks away from it. When that trips, the bias is REVERTED to its
+    // value at window start, so whatever the rotation taught before tripping is
+    // taken back. (A yaw rotation is invisible to the accel by nature — but yaw
+    // does not move gravity, and the bevel is computed from gravity alone.)
+    bool in_learn_zone = true;
+    if (bias_still_ticks_ == 0) {
+        bias_anchor_          = accel_g;
+        bias_at_window_start_ = filter_.bias();
+    } else {
+        const float dx = accel_g.x - bias_anchor_.x;
+        const float dy = accel_g.y - bias_anchor_.y;
+        const float dz = accel_g.z - bias_anchor_.z;
+        const float drift = std::sqrt(dx*dx + dy*dy + dz*dz);
+        if (drift > mahony::BIAS_STILL_DRIFT_TOL_G) {
+            filter_.set_bias(bias_at_window_start_);   // that was rotation, not rest
+            bias_still_ticks_ = 0;
+            return;
+        }
+        // Middle zone: still inside the trip threshold but visibly walking away
+        // from the anchor. Could be the front edge of a slow rotation — hold
+        // (keep the window, learn nothing) until it either trips or settles.
+        in_learn_zone = drift < mahony::BIAS_STILL_DRIFT_TOL_G * 0.5f;
+    }
+    if (bias_still_ticks_ < 0xFFFF) ++bias_still_ticks_;
+    if (bias_still_ticks_ <= mahony::BIAS_STILL_TICKS) {
         return;                      // not yet convinced it is actually at rest
     }
+    if (!in_learn_zone) return;
+
+    // Commit point: during a long genuine rest, periodically accept the learned
+    // bias as the new revert baseline, so one noise spike tripping the anchor
+    // cannot throw away minutes of legitimate convergence.
+    if ((bias_still_ticks_ & 0x7F) == 0) bias_at_window_start_ = filter_.bias();
 
     // Held still long enough: whatever the gyro still reads is bias, not motion.
     Vec3 b = filter_.bias();
@@ -103,6 +137,8 @@ void App::begin(bool had_session_in_rtc_ram) {
         edge_axis_          = s.edge_axis;
         strokes_a_          = s.strokes_A;
         strokes_b_          = s.strokes_B;
+        active_ticks_       = s.active_ticks;
+        green_ticks_        = s.green_ticks;
         session_started_ms_ = s.session_started_ms;
         side_fsm_.restore_side(s.current_side);
         if (is_zero_vec(g_flat_)) {
@@ -117,6 +153,7 @@ void App::begin(bool had_session_in_rtc_ram) {
 }
 
 void App::transition(State to, uint32_t now_ms) {
+    const State from  = state_;
     state_            = to;
     state_entered_ms_ = now_ms;
     last_activity_ms_ = now_ms;
@@ -161,10 +198,11 @@ void App::transition(State to, uint32_t now_ms) {
         case State::SUMMARY: {
             uint32_t dur_s = (session_started_ms_ != 0 && now_ms >= session_started_ms_)
                              ? (now_ms - session_started_ms_) / 1000 : 0;
-            // Persist the finished session exactly once, on entry to SUMMARY —
-            // not per stroke, which would wear out NVS for no benefit. Skip
+            // Persist the finished session exactly once, on the ACTIVE -> SUMMARY
+            // edge — not per stroke (NVS wear), and NOT on re-entry from HISTORY,
+            // which would prepend a duplicate record per history visit. Skip
             // sessions with no ACTIVE time; they carry nothing worth keeping.
-            if (active_ticks_ > 0) {
+            if (from == State::ACTIVE && active_ticks_ > 0) {
                 SessionRecord r;
                 r.target_deg_x10 = (uint16_t)(target_deg_ * 10.0f + 0.5f);
                 r.tolerance      = (uint8_t)tol_;
@@ -214,6 +252,8 @@ void App::save_session_() {
     ss.edge_axis          = edge_axis_;
     ss.strokes_A          = strokes_a_;
     ss.strokes_B          = strokes_b_;
+    ss.active_ticks       = active_ticks_;
+    ss.green_ticks        = green_ticks_;
     ss.current_side       = side_fsm_.current_side();
     ss.session_started_ms = session_started_ms_;
     session::mark_active(ss);
@@ -575,8 +615,12 @@ void App::handle_verify(const Tick& t) {
             filter_.nudge_to_gravity(t.accel_g);   // start from a known-good pose
             ui::clear();
         } else {
-            const int remaining = (zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining())
-                                  * (int)kLoopTickMs;
+            // Same total as handle_zero_cal: during WARMUP, averaging_remaining()
+            // is still 0, so add the averaging window or the countdown would jump
+            // UP when averaging starts.
+            int rem_ticks = zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining();
+            if (zc_fsm_.phase() == zero_cal::Phase::WARMUP) rem_ticks += zero_cal::AVERAGING_TICKS;
+            const int remaining = rem_ticks * (int)kLoopTickMs;
             ui::draw_verify_capture(remaining, zc_fsm_.moving());
         }
         return;

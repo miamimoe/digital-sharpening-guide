@@ -6,7 +6,7 @@
 // update that leaves a stale struct in RTC RAM is detected and discarded instead
 // of read as garbage. magic/version MUST stay the first two fields.
 constexpr uint32_t SESSION_MAGIC   = 0x53475A32;  // "SGZ2"
-constexpr uint16_t SESSION_VERSION = 2;            // edge-axis single-zero model
+constexpr uint16_t SESSION_VERSION = 3;            // + time-on-angle counters
 
 struct SessionState {
     uint32_t  magic              = SESSION_MAGIC;
@@ -18,6 +18,10 @@ struct SessionState {
     Vec3      edge_axis          = {0.0f, 0.0f, 0.0f};  // cutting-edge / hinge axis
     uint32_t  strokes_A          = 0;
     uint32_t  strokes_B          = 0;
+    // Time-on-angle counters, carried across deep sleep so a resumed session's
+    // green percentage covers both sides of the sleep boundary.
+    uint32_t  active_ticks       = 0;
+    uint32_t  green_ticks        = 0;
     Side      current_side       = Side::A;
     uint32_t  session_started_ms = 0;
 };

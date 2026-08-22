@@ -381,6 +381,58 @@ void test_bias_requires_a_sustained_still_run(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, a.gyro_bias().x);
 }
 
+void test_bias_rejects_slow_rotation_below_gyro_threshold(void) {
+    // The gyro-rate guard alone cannot see a rotation slower than its 2 dps
+    // threshold — |a| stays at 1 g throughout. The accel-direction anchor must
+    // catch it and revert anything learned inside the window. Without the
+    // anchor, 6 s of this teaches the filter ~1.4 dps of phantom bias.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    const float RATE = 1.5f;                       // dps, below BIAS_STILL_GYRO_DPS
+    float theta = 0.0f;
+    for (int i = 0; i < 300; i++) {                // 6 s at the 10 ms test tick
+        t += 10;
+        theta += RATE * 0.01f * (float)M_PI / 180.0f;
+        Vec3 acc = {0.0f, std::sin(theta), -std::cos(theta)};
+        App::Tick tick{t, InputEvent::NONE, acc, {RATE, 0.0f, 0.0f}, FaultCode::NONE};
+        a.on_tick(tick);
+    }
+    TEST_ASSERT_TRUE(std::fabs(a.gyro_bias().x) < 0.4f);
+}
+
+void test_history_visit_does_not_duplicate_the_record(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 1000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // ACTIVE -> SUMMARY (records)
+    advance(a, t, 100, InputEvent::B_LONG);          // SUMMARY -> HISTORY
+    advance(a, t, 100, InputEvent::A_SHORT);         // HISTORY -> SUMMARY (must NOT record)
+    advance(a, t, 100, InputEvent::B_LONG);          // and again for good measure
+    advance(a, t, 100, InputEvent::A_SHORT);
+    SessionRecord recs[kSessionHistoryMax];
+    TEST_ASSERT_EQUAL_INT(1, settings::load_session_history(recs, kSessionHistoryMax));
+}
+
+void test_resume_restores_time_on_angle(void) {
+    // A session resumed after deep sleep must keep its pre-sleep green stats,
+    // or green_pct and the final record silently drop everything before sleep.
+    App a;
+    SessionState s;
+    s.target_deg   = 17.0f;
+    s.tolerance    = Tolerance::NORMAL;
+    s.g_flat       = {0.0f, 0.0f, -1.0f};
+    s.edge_axis    = {1.0f, 0.0f,  0.0f};
+    s.active_ticks = 1000;
+    s.green_ticks  = 500;                            // 50% before sleep
+    session::mark_active(s);
+    a.begin(true);
+    uint32_t t = 0;
+    advance(a, t, 100, InputEvent::A_SHORT);         // RESUME_PROMPT -> ACTIVE
+    TEST_ASSERT_TRUE(a.green_pct() >= 45 && a.green_pct() <= 55);
+}
+
 void test_tolerance_b_long_toggles_steady_without_advancing(void) {
     App a;
     a.begin(false);
@@ -623,6 +675,9 @@ int main(int, char**) {
     RUN_TEST(test_bias_ignores_a_slow_steady_rotation);
     RUN_TEST(test_bias_ignores_ticks_while_accelerating);
     RUN_TEST(test_bias_requires_a_sustained_still_run);
+    RUN_TEST(test_bias_rejects_slow_rotation_below_gyro_threshold);
+    RUN_TEST(test_history_visit_does_not_duplicate_the_record);
+    RUN_TEST(test_resume_restores_time_on_angle);
     RUN_TEST(test_tolerance_b_long_toggles_steady_without_advancing);
     RUN_TEST(test_tolerance_b_long_does_not_change_tolerance);
     RUN_TEST(test_tolerance_a_confirms_and_advances);
