@@ -32,6 +32,10 @@ static PresetSelection next_preset(PresetSelection p) {
     __builtin_unreachable();
 }
 
+void App::apply_steady_() {
+    filter_.set_accel_tau(steady_ ? mahony::ACCEL_LP_TAU_S : 0.0f);
+}
+
 static Tolerance next_tolerance(Tolerance t) {
     switch (t) {
         case Tolerance::TIGHT:  return Tolerance::NORMAL;
@@ -50,6 +54,8 @@ void App::begin(bool had_session_in_rtc_ram) {
     filter_.set_bias(settings::load_gyro_bias());
     buzzer_on_ = settings::load_buzzer();
     tol_       = settings::load_tolerance();
+    steady_    = settings::load_steady();
+    apply_steady_();
 
     // Wake-from-sleep path. RTC RAM only survives deep sleep (battery pull
     // clears it), so a present session implies wake — skip BOOT splash and
@@ -82,6 +88,12 @@ void App::transition(State to, uint32_t now_ms) {
     last_activity_ms_ = now_ms;
     last_stroke_ms_   = now_ms;
 
+    // prev_color_ carries no meaning until ACTIVE has classified once. Without
+    // this, the first classification would inherit the initial GREEN and get the
+    // widened (sticky) green band — reading in-tolerance while genuinely outside
+    // it, and staying there. The first classification must be unbiased.
+    if (to == State::ACTIVE) color_valid_ = false;
+
     switch (to) {
         case State::BOOT:          ui::draw_boot(); break;
         case State::SET_TARGET:
@@ -89,7 +101,7 @@ void App::transition(State to, uint32_t now_ms) {
             preset_selection_ = PresetSelection::P12;
             ui::draw_set_target(target_deg_, in_preset_mode_, preset_selection_);
             break;
-        case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_); break;
+        case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_, steady_); break;
         case State::ZERO_CAL:
             // Invalidate the ACTIVE dirty-region cache here rather than relying on
             // every predecessor screen having cleared it on its way out.
@@ -303,7 +315,15 @@ void App::handle_set_tolerance(const Tick& t) {
     if (t.input == InputEvent::B_SHORT) {
         tol_ = next_tolerance(tol_);
         last_activity_ms_ = t.now_ms;
-        ui::draw_set_tolerance(tol_);
+        ui::draw_set_tolerance(tol_, steady_);
+    } else if (t.input == InputEvent::B_LONG) {
+        // Beta A/B switch: flip steady mode without reflashing, so one device can
+        // be compared against itself in the same session.
+        steady_ = !steady_;
+        settings::save_steady(steady_);
+        apply_steady_();
+        last_activity_ms_ = t.now_ms;
+        ui::draw_set_tolerance(tol_, steady_);
     } else if (t.input == InputEvent::A_SHORT) {
         settings::save_tolerance(tol_);
         // confirm tolerance, persist, advance into ZERO_CAL.
@@ -331,7 +351,10 @@ void App::handle_active(const Tick& t) {
     // Skew-corrected bevel about the captured edge axis. One reference (g_flat_,
     // edge_axis_) serves both blade faces — the flipped face is folded internally.
     float bevel = bevel_angle(g_flat_, edge_axis_, g_now);
-    ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_));
+    ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_),
+                              prev_color_,
+                              (steady_ && color_valid_) ? CLASSIFY_HYSTERESIS_DEG : 0.0f);
+    color_valid_ = true;
 
     // Horizontal linear acceleration = the stroke motion (gravity removed, then
     // the component in the stone plane). g_now is a unit vector, so accel - g_now
@@ -404,7 +427,7 @@ void App::handle_active(const Tick& t) {
                       side_fsm_.current_side(),
                       strokes_a_, strokes_b_,
                       buzzer_flash_showing_, buzzer_on_,
-                      bevel };
+                      bevel, steady_ };
     ui::draw_active(v);
 }
 

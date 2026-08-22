@@ -5,9 +5,22 @@ static inline float dot(Vec3 a, Vec3 b) {
     return a.x*b.x + a.y*b.y + a.z*b.z;
 }
 
-ColorState classify(float magnitude_deg, float target_deg, float tolerance_deg) {
+ColorState classify(float magnitude_deg, float target_deg, float tolerance_deg,
+                    ColorState prev, float hyst_deg) {
     float low  = target_deg - tolerance_deg;
     float high = target_deg + tolerance_deg;
+
+    // Widen the band we are currently in, so leaving it costs hyst_deg of real
+    // movement rather than a noise sample. Each state is made sticky against the
+    // boundary it would otherwise chatter across.
+    if (hyst_deg > 0.0f) {
+        switch (prev) {
+            case ColorState::GREEN: low -= hyst_deg; high += hyst_deg; break;
+            case ColorState::BLUE:  low += hyst_deg; break;   // must rise clear of low
+            case ColorState::RED:   high -= hyst_deg; break;  // must fall clear of high
+        }
+    }
+
     if (magnitude_deg < low)  return ColorState::BLUE;   // below target: raise spine
     if (magnitude_deg > high) return ColorState::RED;    // above target: lower spine
     return ColorState::GREEN;

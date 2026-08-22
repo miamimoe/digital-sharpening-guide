@@ -7,7 +7,19 @@
 //   in  [target-tol, target+tol] => GREEN
 //   <   target-tol               => BLUE (below target: raise the spine)
 //   >   target+tol               => RED  (above target: lower the spine)
-ColorState classify(float magnitude_deg, float target_deg, float tolerance_deg);
+//
+// hyst_deg adds hysteresis: whichever state `prev` names has its band widened by
+// hyst_deg, so leaving a state requires clearing its threshold by that margin.
+// Without it, an angle sitting exactly on a boundary re-classifies every 50 Hz
+// tick — which repaints the whole screen and (because app.cpp beeps on the
+// GREEN -> non-GREEN edge) machine-guns the buzzer. hyst_deg = 0 restores the
+// plain threshold behaviour.
+ColorState classify(float magnitude_deg, float target_deg, float tolerance_deg,
+                    ColorState prev = ColorState::BLUE, float hyst_deg = 0.0f);
+
+// Hysteresis half-width used in ACTIVE when steady mode is on. Comfortably wider
+// than the residual angle noise, well inside the tightest (+/-2 deg) tolerance.
+constexpr float CLASSIFY_HYSTERESIS_DEG = 0.7f;
 
 // --- Edge-axis (skew-corrected) bevel measurement ---
 

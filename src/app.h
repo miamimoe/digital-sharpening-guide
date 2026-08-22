@@ -23,6 +23,7 @@ public:
     float     target_deg()       const { return target_deg_; }
     Tolerance tolerance()        const { return tol_; }
     bool      buzzer_on()        const { return buzzer_on_; }
+    bool      steady_on()        const { return steady_; }
     uint32_t  strokes_a()        const { return strokes_a_; }
     uint32_t  strokes_b()        const { return strokes_b_; }
     Side      current_side()     const { return side_fsm_.current_side(); }
@@ -53,6 +54,11 @@ private:
     float            target_deg_           = 17.0f;
     Tolerance        tol_                  = Tolerance::NORMAL;
     bool             buzzer_on_            = false;
+    // Steady mode (beta A/B switch): accel-reference smoothing in the filter plus
+    // display and colour hysteresis. Toggled by B-hold on the TOLERANCE screen.
+    bool             steady_               = true;
+
+    void apply_steady_();   // push steady_ into the filter's accel time constant
     Vec3             g_flat_               = {0.0f, 0.0f, 0.0f};  // flat-on-stone reference
     Vec3             edge_axis_            = {0.0f, 0.0f, 0.0f};  // cutting-edge / hinge axis
 
@@ -84,6 +90,9 @@ private:
     // Track prior color so the buzzer beeps on the edge GREEN -> non-GREEN,
     // not every tick while out of tolerance.
     ColorState       prev_color_           = ColorState::GREEN;
+    // False until ACTIVE has classified at least once, so colour hysteresis is
+    // not applied against a meaningless prior state (see transition()).
+    bool             color_valid_          = false;
 
     MahonyFilter filter_;
     StrokeFSM    stroke_fsm_;

@@ -2,9 +2,10 @@
 
 #ifdef UNIT_TEST
 namespace {
-    Tolerance g_tol   = Tolerance::NORMAL;
-    bool      g_buzz  = false;
-    Vec3      g_bias  = {0.0f, 0.0f, 0.0f};
+    Tolerance g_tol    = Tolerance::NORMAL;
+    bool      g_buzz   = false;
+    bool      g_steady = true;
+    Vec3      g_bias   = {0.0f, 0.0f, 0.0f};
 }
 namespace settings {
     void begin() {}
@@ -12,6 +13,8 @@ namespace settings {
     void      save_tolerance(Tolerance t) { g_tol = t; }
     bool      load_buzzer()               { return g_buzz; }
     void      save_buzzer(bool on)        { g_buzz = on; }
+    bool      load_steady()               { return g_steady; }
+    void      save_steady(bool on)        { g_steady = on; }
     Vec3      load_gyro_bias()            { return g_bias; }
     void      save_gyro_bias(Vec3 b)      { g_bias = b; }
 }
@@ -33,6 +36,8 @@ namespace settings {
     }
     bool load_buzzer()               { return prefs.getBool("buzz", false); }
     void save_buzzer(bool on)        { prefs.putBool("buzz", on); }
+    bool load_steady()               { return prefs.getBool("steady", true); }
+    void save_steady(bool on)        { prefs.putBool("steady", on); }
     // Gyro bias is stored as a single NVS blob (one entry instead of three float
     // keys). Old bx/by/bz keys may remain orphaned in NVS; that is acceptable.
     Vec3 load_gyro_bias() {

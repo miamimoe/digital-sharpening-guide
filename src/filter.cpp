@@ -11,6 +11,7 @@ void MahonyFilter::begin(float sample_hz, float kp, float ki) {
     kp_ = (kp > 0.0f) ? kp : 0.5f;
     ki_ = ki;
     dt_ = 1.0f / sample_hz;
+    a_lp_valid_ = false;   // drop the smoothed accel; a_tau_ (a config) survives
 }
 
 void MahonyFilter::reset() {
@@ -23,7 +24,30 @@ void MahonyFilter::update(Vec3 gyro_dps, Vec3 accel_g) {
     float gy = (gyro_dps.y - bias_.y) * DEG2RAD;
     float gz = (gyro_dps.z - bias_.z) * DEG2RAD;
 
-    float ax = accel_g.x, ay = accel_g.y, az = accel_g.z;
+    // Gravity reference. When smoothing is enabled this is a low-passed accel, so
+    // the oscillatory (zero-mean) part of a sharpening stroke averages out before
+    // it can steer the orientation. The gyro terms above are deliberately NOT
+    // smoothed — they carry the fast response.
+    Vec3 a_ref = accel_g;
+    if (a_tau_ > 0.0f) {
+        if (!a_lp_valid_) {
+            a_lp_       = accel_g;      // seed on first sample: no start-up ramp
+            a_lp_valid_ = true;
+        } else {
+            const float al = dt_ / (a_tau_ + dt_);
+            a_lp_.x += al * (accel_g.x - a_lp_.x);
+            a_lp_.y += al * (accel_g.y - a_lp_.y);
+            a_lp_.z += al * (accel_g.z - a_lp_.z);
+        }
+        a_ref = a_lp_;
+    } else {
+        // Smoothing off: keep the raw sample so accel_reference() honours its
+        // contract (last raw accel) instead of reporting {0,0,0} to diagnostics.
+        a_lp_       = accel_g;
+        a_lp_valid_ = true;
+    }
+
+    float ax = a_ref.x, ay = a_ref.y, az = a_ref.z;
 
     float an = ax*ax + ay*ay + az*az;
     // Trust the accel as gravity only when its magnitude is near 1g; during a
@@ -100,6 +124,10 @@ void MahonyFilter::nudge_to_gravity(Vec3 accel_g) {
         q0_ *= inv; q1_ *= inv; q2_ *= inv; q3_ *= inv;
     }
     ix_ = iy_ = iz_ = 0.0f;                   // re-anchor: drop accumulated integral term
+    // Re-seed the smoothed accel too. Without this the low-pass still holds the
+    // pre-snap history and would drag the freshly re-anchored orientation back.
+    a_lp_       = accel_g;
+    a_lp_valid_ = true;
 }
 
 bool mahony::should_snap(Vec3 g_filter, Vec3 accel_g, Vec3 gyro_dps) {
