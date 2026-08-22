@@ -154,11 +154,15 @@ the S3 deep-sleep wake source (EXT0 pin vs. M5Unified-managed power-button wake)
   `board_M5StickCPlus2`, `board_M5StickS3` and autodetects all three at runtime (verified in the installed
   M5GFX source), so nothing in this design depends on a later release.
   **Superseded at v0.2.1 (2026-08-21):** the constraint changed from the range `^0.2.14` to the exact pin
-  `0.2.20` — same feature floor, but the caret had silently drifted the published build. Rebuilding an
-  unmodified `main` produced a binary ~55 KB smaller than the released v0.2.0 `.bin`, because `^0.2.14`
-  had resolved forward to M5Unified 0.2.20 / M5GFX 0.2.27 (and `espressif32@^6.5.0` to 6.13.0). Exact
-  pins make a released binary reproducible; bumps are now deliberate and reviewable. All envs stay on
-  `0.2.20`.
+  `0.2.20` — same feature floor; exact pins make a released binary reproducible and make dependency bumps
+  deliberate and reviewable. All envs stay on `0.2.20`.
+  **Correction (2026-08-22):** the "~55 KB smaller rebuild" observed at pin time was NOT dependency drift.
+  The published release `.bin`s are MERGED flash images (bootloader + partition table + boot_app0 + app,
+  flashed at offset 0 by the browser flasher); a bare `.pio/build/<env>/firmware.bin` is the app alone and
+  is ~64 KB smaller by construction — and does not boot if flashed at offset 0 (no second-stage
+  bootloader: black screen, USB still enumerates). v0.2.1/v0.3.0-beta.1 initially shipped bare app images
+  and were unbootable until repackaged. `scripts/check_flasher_bins.py` now validates every manifest's
+  image structure; run it before publishing any `.bin`.
 - **Generic board bases are deliberate (the key constraint).** Plus2 uses `esp32dev` and S3 uses
   `esp32-s3-devkitc-1` — NOT an `m5stick`/`m5stack-stamps3` base. M5GFX only runs its Plus2/S3 autodetect
   probes when its internal `board` seed is `0`; a board base that defines an `ARDUINO_M5Stick*` macro
