@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Beta — Digital Sharpening Guide</title>
+  <meta name="description" content="Unlisted beta build of the Digital Sharpening Guide firmware: steady mode, for testing before release." />
+  <meta name="robots" content="noindex, nofollow" />
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --panel: #16191f;
+      --text: #e8eaed;
+      --muted: #9aa0a6;
+      --green: #20c25a;
+      --blue: #2f7bff;
+      --red: #ff4d4d;
+      --amber: #f0a13a;
+      --line: #262a31;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 48px 22px 80px; }
+    .beta-tag {
+      display: block; width: fit-content; margin: 0 auto 18px;
+      border: 1px solid var(--amber); color: var(--amber);
+      border-radius: 999px; padding: 4px 14px;
+      font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+    }
+    h1 { font-size: 1.9rem; text-align: center; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .sub { text-align: center; color: var(--muted); margin: 0 auto 30px; max-width: 560px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 26px;
+      margin-bottom: 22px;
+    }
+    .panel.warn { border-color: var(--amber); }
+    .panel h2 { margin: 0 0 14px; font-size: 1.05rem; }
+    ol, ul { margin: 0; padding-left: 20px; }
+    ol li, ul li { margin-bottom: 8px; }
+    .cta { text-align: center; margin: 30px 0 8px; }
+    esp-web-install-button { --esp-tools-button-color: #0d0f12; --esp-tools-button-text-color: #fff; }
+    .btn-fallback {
+      display: inline-block; padding: 13px 26px; border-radius: 999px;
+      background: var(--amber); color: #241402; font-weight: 700;
+      text-decoration: none; border: 0; cursor: pointer; font-size: 1rem;
+    }
+    select {
+      width: 100%; padding: 11px 12px; border-radius: 8px;
+      background: #0a0c0f; color: var(--text); border: 1px solid var(--line); font-size: 1rem;
+    }
+    .note { color: var(--muted); font-size: 0.88rem; }
+    .note.center { text-align: center; }
+    .unsupported { display: none; color: var(--red); text-align: center; font-size: 0.95rem; margin-top: 14px; }
+    code { background: #0a0c0f; padding: 2px 6px; border-radius: 5px; font-size: 0.85em; }
+    kbd {
+      background: #0a0c0f; border: 1px solid var(--line); border-bottom-width: 2px;
+      border-radius: 5px; padding: 1px 6px; font-size: 0.82em; font-family: inherit;
+    }
+    a { color: var(--green); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 6px; }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="beta-tag">Beta · v0.3.0-beta.1</span>
+    <h1>Steady mode</h1>
+    <p class="sub">A test build that goes after the jittery angle reading. Not linked from the main flasher and not a release — flash it, sharpen with it, and tell me whether the number actually sits still.</p>
+
+    <div class="panel warn">
+      <h2>Before you flash</h2>
+      <ul>
+        <li>This <strong>replaces</strong> whatever is on the stick. To go back, re-flash from the <a href="./">normal flasher</a> — nothing here is one-way.</li>
+        <li>Your saved settings (tolerance, buzzer) survive. A new <code>STEADY</code> setting is added, defaulting to <strong>on</strong>.</li>
+        <li>Not hardware-tested by me — that is the entire point of handing it to you.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>1 · Pick your build</h2>
+      <select id="device" aria-label="Choose your build">
+        <option value="manifest-plus-beta.json">M5StickC Plus — beta firmware</option>
+        <option value="manifest-plus2-beta.json">M5StickC Plus2 — beta firmware</option>
+        <option value="manifest-s3-beta.json">M5StickS3 — beta firmware</option>
+        <option value="manifest-diag-plus-beta.json">M5StickC Plus — diagnostic</option>
+        <option value="manifest-diag-s3-beta.json">M5StickS3 — diagnostic</option>
+      </select>
+      <p class="note" style="margin:12px 0 0">The <strong>diagnostic</strong> builds do not sharpen — they measure. See step 4.</p>
+    </div>
+
+    <div class="cta">
+      <esp-web-install-button id="installer" manifest="manifest-plus-beta.json">
+        <button slot="activate" class="btn-fallback">⚡ Flash the beta</button>
+        <span slot="unsupported" class="unsupported">Your browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
+        <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) connection.</span>
+      </esp-web-install-button>
+      <p class="note center" style="margin-top:16px;">Desktop Chrome / Edge / Opera, USB-C <em>data</em> cable. Splash should read <code>v0.3.0-beta.1</code>.</p>
+    </div>
+
+    <div class="panel">
+      <h2>2 · What changed</h2>
+      <p style="margin-top:0">Two things, both behind one switch:</p>
+      <ul>
+        <li><strong>The gravity reference is smoothed before it steers the angle.</strong> A stroke pushes the blade sideways, and the old code could not tell that apart from gravity — 0.18&nbsp;g of sweep tilted the reference 10.2° while changing its magnitude only 0.016&nbsp;g, far too little to be rejected. Averaging the reference removes the stroke, which is oscillatory, and keeps gravity, which is not.</li>
+        <li><strong>The number and the colour hold against chatter.</strong> A reading hovering at 19.5 used to flip 19/20/19/20 forever, and a knife sitting on the tolerance edge strobed the whole screen and machine-gunned the buzzer. Both now need a real move before they change.</li>
+      </ul>
+      <p style="margin-bottom:0" class="note">Simulated, on a 0.18&nbsp;g stroke — measured on your stone is what actually counts:</p>
+      <table>
+        <thead><tr><th>Stroke rate</th><th>Before</th><th>After</th><th>Steadier by</th></tr></thead>
+        <tbody>
+          <tr><td class="num">0.7 Hz</td><td class="num">4.77°</td><td class="num">2.08°</td><td class="num">2.3×</td></tr>
+          <tr><td class="num">1.0 Hz</td><td class="num">3.49°</td><td class="num">1.21°</td><td class="num">2.9×</td></tr>
+          <tr><td class="num">1.5 Hz</td><td class="num">2.42°</td><td class="num">0.68°</td><td class="num">3.6×</td></tr>
+          <tr><td class="num">2.0 Hz</td><td class="num">1.84°</td><td class="num">0.47°</td><td class="num">4.0×</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>3 · How to test it (the important bit)</h2>
+      <p style="margin-top:0">You can switch it on and off <strong>on the device</strong>, so you are comparing against the same stick, same knife, same stone — not against your memory of last week.</p>
+      <ol>
+        <li>On the <strong>TOLERANCE</strong> screen, <strong>hold B</strong> to flip <code>STEADY: ON</code> / <code>STEADY: OFF</code>. It sticks across restarts.</li>
+        <li>Sharpen a full side with it <strong>ON</strong>. Note how much the number moves and how often the colour flips.</li>
+        <li>Turn it <strong>OFF</strong> and sharpen the same way again.</li>
+        <li>Tell me: is the number calmer? Does the colour still change fast enough to be useful, or does it feel late?</li>
+      </ol>
+      <p class="note" style="margin-bottom:0"><strong>The risk to watch for is lag.</strong> Smoothing always trades response for calm. If green now feels like it arrives after you have already found the angle, say so — the time constant is one number and easy to back off.</p>
+    </div>
+
+    <div class="panel">
+      <h2>4 · Optional: get me numbers</h2>
+      <p style="margin-top:0">The <strong>diagnostic</strong> build runs both filters — old and new — side by side on the same sensor data, so it can measure the difference on your hardware rather than in my simulation.</p>
+      <ol>
+        <li>Flash the diagnostic build for your stick.</li>
+        <li>In the flasher dialog choose <strong>Logs &amp; Console</strong> (or any serial monitor at 115200).</li>
+        <li>Hold the device still at your angle for the 2-second reference capture.</li>
+        <li>Sharpen normally for a minute and copy me a few lines.</li>
+      </ol>
+      <p class="note">Each line reads like this — <code>sd</code> and <code>pp</code> are how much the reading moved, so lower is better, and <code>gain</code> is how many times steadier the new filter was on <em>your</em> data:</p>
+      <p style="margin:0"><code>raw sd= 1.42 pp= 6.10 | steady sd= 0.38 pp= 1.70 | gain  3.7x/ 3.6x | hdrm 0.0 smp 0.0mg | readfail 0/100</code></p>
+      <p class="note" style="margin-bottom:0"><code>hdrm</code> answers a question I could not settle without hardware: how many spare IMU samples sit unused between ticks, and how much a per-tick average would change the reading. If that number is large, there is a second, bigger fix worth doing. If it is near zero, there isn't.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Going back</h2>
+      <p style="margin:0">The <a href="./">normal flasher</a> puts the released v0.2.1 back on. Settings survive, so re-flashing does not lose your tolerance or buzzer preference.</p>
+    </div>
+
+    <footer>
+      Beta build ·
+      <a href="https://github.com/miamimoe/digital-sharpening-guide" target="_blank" rel="noopener">github.com/miamimoe/digital-sharpening-guide</a>
+    </footer>
+  </div>
+
+  <script>
+    var deviceSelect = document.getElementById('device');
+    var installer = document.getElementById('installer');
+    deviceSelect.addEventListener('change', function () {
+      installer.setAttribute('manifest', deviceSelect.value);
+    });
+  </script>
+</body>
+</html>

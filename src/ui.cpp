@@ -23,6 +23,12 @@ namespace {
     char           s_last_angle[12] = "";
     bool           s_last_angle_valid = false;
 
+    // Currently-shown angle, held against sub-degree chatter in steady mode
+    // (see draw_active). Distinct from s_last_angle, which is the rendered text
+    // used for dirty-region suppression.
+    float          s_shown_deg   = 0.0f;
+    bool           s_shown_valid = false;
+
     // Throttle ZERO_CAL countdown to ~10 Hz (only repaint when tenths digit or
     // the moving-state changes).
     int  s_last_zc_tenths       = -1;
@@ -75,13 +81,14 @@ void clear() {
     s_last_valid = false;
     s_last_angle_valid = false;
     s_last_zc_tenths_valid = false;
+    s_shown_valid = false;
 }
 
 void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v0.2.1",     100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v0.3.0-beta.1", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -99,7 +106,7 @@ void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection 
                   118, 1, COL_WHITE, COL_BLACK);
 }
 
-void draw_set_tolerance(Tolerance tol) {
+void draw_set_tolerance(Tolerance tol, bool steady) {
     clear();
     draw_centered("TOLERANCE", 8, 1, COL_WHITE, COL_BLACK);
     const char* label = "NORMAL +-3";
@@ -108,8 +115,11 @@ void draw_set_tolerance(Tolerance tol) {
         case Tolerance::NORMAL: label = "NORMAL +-3"; break;
         case Tolerance::EASY:   label = "EASY +-5";   break;
     }
-    draw_centered(label, 52, 3, COL_WHITE, COL_BLACK);
-    draw_centered("A:Confirm   B:Change", 118, 1, COL_WHITE, COL_BLACK);
+    draw_centered(label, 46, 3, COL_WHITE, COL_BLACK);
+    // Beta A/B switch. Lives here because this screen already repaints on input
+    // and is the last stop before a session starts.
+    draw_centered(steady ? "STEADY: ON" : "STEADY: OFF", 84, 2, COL_WHITE, COL_BLACK);
+    draw_centered("A:Confirm  B:Chg  B-hold:Steady", 118, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_active(const ActiveView& v) {
@@ -163,11 +173,22 @@ void draw_active(const ActiveView& v) {
         draw_centered_in(sbuf, DIV_X, SCR_W - DIV_X, SUB_Y, 2, COL_WHITE, bg);
     }
 
-    // Left column: live angle as a whole number. Rounding to an integer also
-    // means we only repaint when the displayed degree actually changes, so the
-    // value no longer flickers on sub-degree jitter.
+    // Left column: live angle as a whole number. Rounding alone is not enough —
+    // a value hovering near x.5 flips between two integers forever. In steady mode
+    // the shown degree only moves once the live angle clears it by more than half
+    // a degree plus a margin, which leaves a ~0.3 deg deadband and stops the
+    // chatter without adding any lag to a real change.
+    if (v.steady) {
+        if (!s_shown_valid || std::fabs(v.angle_deg - s_shown_deg) > 0.65f) {
+            s_shown_deg  = (float)std::lround(v.angle_deg);
+            s_shown_valid = true;
+        }
+    } else {
+        s_shown_deg   = v.angle_deg;
+        s_shown_valid = true;
+    }
     char abuf[12];
-    std::snprintf(abuf, sizeof abuf, "%ld", std::lround(v.angle_deg));
+    std::snprintf(abuf, sizeof abuf, "%ld", std::lround(s_shown_deg));
     if (color_changed || flash_ended
         || !s_last_angle_valid || std::strcmp(abuf, s_last_angle) != 0) {
         M5.Display.fillRect(0, NUM_Y, DIV_X - 1, 8 * NUM_SZ, bg);
@@ -284,7 +305,7 @@ namespace ui {
     void clear() {}
     void draw_boot() {}
     void draw_set_target(float, bool, PresetSelection) {}
-    void draw_set_tolerance(Tolerance) {}
+    void draw_set_tolerance(Tolerance, bool) {}
     void draw_active(const ActiveView&) {}
     void draw_summary(float, Tolerance, uint32_t, uint32_t, uint32_t) {}
     void draw_fault(FaultCode) {}

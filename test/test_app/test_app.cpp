@@ -190,6 +190,32 @@ void test_preset_cancel_returns_to_live_capture(void) {
     TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
 }
 
+void test_tolerance_b_long_toggles_steady_without_advancing(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);    // SET_TARGET -> SET_TOLERANCE
+    bool before = a.steady_on();
+    advance(a, t, 100, InputEvent::B_LONG);
+    TEST_ASSERT_EQUAL_INT((int)!before, (int)a.steady_on());
+    // The A/B switch must not disturb the flow it lives on.
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
+    advance(a, t, 100, InputEvent::B_LONG);
+    TEST_ASSERT_EQUAL_INT((int)before, (int)a.steady_on());
+}
+
+void test_tolerance_b_long_does_not_change_tolerance(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    Tolerance before = a.tolerance();
+    advance(a, t, 100, InputEvent::B_LONG);
+    TEST_ASSERT_EQUAL_INT((int)before, (int)a.tolerance());
+}
+
 void test_tolerance_a_confirms_and_advances(void) {
     App a;
     a.begin(false);
@@ -391,6 +417,8 @@ int main(int, char**) {
     RUN_TEST(test_set_target_b_enters_preset_mode_and_cycles);
     RUN_TEST(test_preset_cycles_to_25_and_28);
     RUN_TEST(test_preset_cancel_returns_to_live_capture);
+    RUN_TEST(test_tolerance_b_long_toggles_steady_without_advancing);
+    RUN_TEST(test_tolerance_b_long_does_not_change_tolerance);
     RUN_TEST(test_tolerance_a_confirms_and_advances);
     RUN_TEST(test_active_long_a_goes_to_summary);
     RUN_TEST(test_summary_a_starts_new_session);

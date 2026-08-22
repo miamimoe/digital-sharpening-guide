@@ -91,6 +91,60 @@ void test_bevel_works_on_flipped_face(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 17.0f, bevel_angle(flat, e, b_pose));
 }
 
+// --- classify hysteresis (steady mode) ---
+
+void test_hysteresis_holds_green_just_past_the_edge(void) {
+    // target 17 +/-3 => green to 20. At 20.4 the plain threshold says RED, but
+    // coming FROM green it must hold: that 0.4 deg is noise, not a real move.
+    TEST_ASSERT_EQUAL_INT((int)ColorState::RED,
+        (int)classify(20.4f, 17.0f, 3.0f, ColorState::RED, 0.7f));
+    TEST_ASSERT_EQUAL_INT((int)ColorState::GREEN,
+        (int)classify(20.4f, 17.0f, 3.0f, ColorState::GREEN, 0.7f));
+}
+
+void test_hysteresis_still_releases_on_a_real_move(void) {
+    // Past the widened edge it must let go — hysteresis delays, never blocks.
+    TEST_ASSERT_EQUAL_INT((int)ColorState::RED,
+        (int)classify(21.5f, 17.0f, 3.0f, ColorState::GREEN, 0.7f));
+    TEST_ASSERT_EQUAL_INT((int)ColorState::BLUE,
+        (int)classify(12.5f, 17.0f, 3.0f, ColorState::GREEN, 0.7f));
+}
+
+void test_hysteresis_makes_blue_and_red_sticky_too(void) {
+    // Chatter happens at both edges, so both must be sticky. 14.2 is inside the
+    // plain green band; coming from BLUE it needs to clear 14.0 + 0.7 first.
+    TEST_ASSERT_EQUAL_INT((int)ColorState::BLUE,
+        (int)classify(14.2f, 17.0f, 3.0f, ColorState::BLUE, 0.7f));
+    TEST_ASSERT_EQUAL_INT((int)ColorState::GREEN,
+        (int)classify(14.8f, 17.0f, 3.0f, ColorState::BLUE, 0.7f));
+    TEST_ASSERT_EQUAL_INT((int)ColorState::RED,
+        (int)classify(19.8f, 17.0f, 3.0f, ColorState::RED, 0.7f));
+    TEST_ASSERT_EQUAL_INT((int)ColorState::GREEN,
+        (int)classify(19.2f, 17.0f, 3.0f, ColorState::RED, 0.7f));
+}
+
+void test_zero_hysteresis_matches_plain_thresholds(void) {
+    // The A/B switch has to be exact when steady mode is off.
+    for (float m = 10.0f; m < 24.0f; m += 0.1f) {
+        ColorState plain = classify(m, 17.0f, 3.0f);
+        const ColorState prevs[3] = { ColorState::GREEN, ColorState::BLUE, ColorState::RED };
+        for (int i = 0; i < 3; i++) {
+            TEST_ASSERT_EQUAL_INT((int)plain, (int)classify(m, 17.0f, 3.0f, prevs[i], 0.0f));
+        }
+    }
+}
+
+void test_hysteresis_cannot_flip_state_on_a_static_reading(void) {
+    // The property that matters: feed one fixed value repeatedly and the state
+    // must reach a fixed point rather than oscillate.
+    ColorState c = classify(20.0f, 17.0f, 3.0f);
+    for (int i = 0; i < 50; i++) {
+        ColorState next = classify(20.0f, 17.0f, 3.0f, c, 0.7f);
+        if (i > 0) TEST_ASSERT_EQUAL_INT((int)c, (int)next);
+        c = next;
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_classify_within_tolerance_is_green);
@@ -105,5 +159,10 @@ int main(int, char**) {
     RUN_TEST(test_bevel_equals_raise_no_skew);
     RUN_TEST(test_bevel_is_skew_invariant);
     RUN_TEST(test_bevel_works_on_flipped_face);
+    RUN_TEST(test_hysteresis_holds_green_just_past_the_edge);
+    RUN_TEST(test_hysteresis_still_releases_on_a_real_move);
+    RUN_TEST(test_hysteresis_makes_blue_and_red_sticky_too);
+    RUN_TEST(test_zero_hysteresis_matches_plain_thresholds);
+    RUN_TEST(test_hysteresis_cannot_flip_state_on_a_static_reading);
     return UNITY_END();
 }

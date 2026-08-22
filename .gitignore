@@ -15,8 +15,11 @@ CLAUDE.md
 *.o
 *.elf
 *.bin
-# ...except the prebuilt firmware served by the browser flasher (GitHub Pages)
+# ...except the prebuilt firmware served by the browser flasher (GitHub Pages).
+# The negation is not recursive, so the beta subdirectory needs its own line —
+# without it the beta .bin files are silently ignored and beta.html 404s.
 !docs/firmware/*.bin
+!docs/firmware/beta/*.bin
 
 # internal SDD scratch (progress ledger, review packages) — never publish
 .superpowers/

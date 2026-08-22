@@ -110,6 +110,97 @@ void test_snap_does_not_repeat_on_steady_accel(void) {
     TEST_ASSERT_FALSE(mahony::should_snap(f.gravity(), accel, {0.0f, 0.0f, 0.0f}));
 }
 
+// --- Accel-reference low-pass (steady mode) ---
+
+namespace {
+// Simulate sharpening: the device is held at a fixed tilt while a horizontal
+// stroke acceleration oscillates at `hz`. Gravity never moves, so any change in
+// the reported tilt is pure disturbance. Returns peak-to-peak tilt error in deg.
+float stroke_wobble_deg(float accel_tau_s, float hz, float amp_g) {
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(accel_tau_s);
+
+    const float dt = 1.0f / 50.0f;
+    // True gravity: device flat, gravity along -Z.
+    const Vec3 g_true = {0.0f, 0.0f, -1.0f};
+    // Settle first so we measure steady-state wobble, not the initial transient.
+    for (int i = 0; i < 400; i++) f.update({0,0,0}, g_true);
+
+    float lo = 1e9f, hi = -1e9f;
+    for (int i = 0; i < 500; i++) {
+        const float t = i * dt;
+        // Horizontal (X) linear acceleration — perpendicular to gravity, which is
+        // exactly the case the magnitude trust gate cannot see.
+        const float ax = amp_g * std::sin(2.0f * (float)M_PI * hz * t);
+        f.update({0,0,0}, {ax, 0.0f, -1.0f});
+        Vec3 g = f.gravity();
+        // Tilt of the estimate away from true gravity, in the X-Z plane.
+        float tilt = std::atan2(g.x, -g.z) * 180.0f / (float)M_PI;
+        if (tilt < lo) lo = tilt;
+        if (tilt > hi) hi = tilt;
+    }
+    return hi - lo;
+}
+}  // namespace
+
+void test_accel_lp_cuts_stroke_wobble(void) {
+    // 0.18 g at 2 Hz is a normal sharpening pass (StrokeFSM::PEAK_HIGH_G).
+    const float raw    = stroke_wobble_deg(0.0f, 2.0f, 0.18f);
+    const float smooth = stroke_wobble_deg(mahony::ACCEL_LP_TAU_S, 2.0f, 0.18f);
+    // The whole point of the change: the same disturbance must move the angle
+    // materially less. Threshold is deliberately loose — this asserts the
+    // mechanism works, not a particular tuning.
+    TEST_ASSERT_TRUE(raw > 0.05f);            // the problem is real to begin with
+    TEST_ASSERT_TRUE(smooth < raw * 0.5f);    // and smoothing at least halves it
+}
+
+void test_accel_lp_still_converges_to_gravity(void) {
+    // Smoothing must not stop the filter from finding gravity — only slow it.
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(mahony::ACCEL_LP_TAU_S);
+    const float g20x = 0.3420f, g20z = -0.9397f;    // 20 deg tilt
+    for (int i = 0; i < 3000; i++) f.update({0,0,0}, {g20x, 0.0f, g20z});
+    Vec3 g = f.gravity();
+    TEST_ASSERT_FLOAT_WITHIN(0.03f, g20x, g.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.03f, g20z, g.z);
+}
+
+void test_accel_tau_zero_is_legacy_behaviour(void) {
+    // The A/B switch must be exact: tau = 0 has to reproduce the old path.
+    MahonyFilter a, b;
+    a.begin(50.0f, 0.8f, 0.02f);
+    b.begin(50.0f, 0.8f, 0.02f);
+    b.set_accel_tau(0.0f);
+    for (int i = 0; i < 200; i++) {
+        Vec3 acc = {0.05f * (float)((i % 7) - 3), 0.02f, -1.0f};
+        a.update({0.1f, 0.0f, 0.0f}, acc);
+        b.update({0.1f, 0.0f, 0.0f}, acc);
+    }
+    Vec3 ga = a.gravity(), gb = b.gravity();
+    TEST_ASSERT_EQUAL_FLOAT(ga.x, gb.x);
+    TEST_ASSERT_EQUAL_FLOAT(ga.y, gb.y);
+    TEST_ASSERT_EQUAL_FLOAT(ga.z, gb.z);
+}
+
+void test_nudge_reseeds_the_smoothed_accel(void) {
+    // After a snap the low-pass must not drag the estimate back to its old value.
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(mahony::ACCEL_LP_TAU_S);
+    for (int i = 0; i < 200; i++) f.update({0,0,0}, {0.0f, 0.0f, -1.0f});
+
+    const Vec3 tilted = {0.3420f, 0.0f, -0.9397f};   // 20 deg
+    f.nudge_to_gravity(tilted);
+    Vec3 g = f.gravity();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, tilted.x, g.x);
+    // One more update must not yank it back toward the old flat reference.
+    f.update({0,0,0}, tilted);
+    g = f.gravity();
+    TEST_ASSERT_FLOAT_WITHIN(0.02f, tilted.x, g.x);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_converges_to_stationary_gravity);
@@ -122,5 +213,9 @@ int main(int, char**) {
     RUN_TEST(test_should_not_snap_when_aligned);
     RUN_TEST(test_should_not_snap_during_linear_accel);
     RUN_TEST(test_snap_does_not_repeat_on_steady_accel);
+    RUN_TEST(test_accel_lp_cuts_stroke_wobble);
+    RUN_TEST(test_accel_lp_still_converges_to_gravity);
+    RUN_TEST(test_accel_tau_zero_is_legacy_behaviour);
+    RUN_TEST(test_nudge_reseeds_the_smoothed_accel);
     return UNITY_END();
 }
