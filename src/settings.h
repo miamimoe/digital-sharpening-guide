@@ -18,4 +18,10 @@ namespace settings {
 
     Vec3       load_gyro_bias();
     void       save_gyro_bias(Vec3 bias_dps);
+
+    // Session history, newest first. Written ONCE per session (never per stroke —
+    // NVS has finite write endurance). Returns how many records were filled.
+    int        load_session_history(SessionRecord* out, int max);
+    void       push_session_record(const SessionRecord& r);
+    void       clear_session_history();
 }

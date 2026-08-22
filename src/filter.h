@@ -6,6 +6,7 @@ public:
     void begin(float sample_hz, float kp = 0.5f, float ki = 0.0f);
     void update(Vec3 gyro_dps, Vec3 accel_g);
     void set_bias(Vec3 gyro_bias_dps) { bias_ = gyro_bias_dps; }
+    Vec3 bias() const { return bias_; }
     Vec3 gravity() const;
     void reset();
 
@@ -73,6 +74,26 @@ namespace mahony {
     // attenuates a 1 Hz disturbance ~4x and 2 Hz ~9x before the Mahony correction
     // (itself a 1/kp = 1.25 s low-pass) sees it at all.
     constexpr float ACCEL_LP_TAU_S      = 0.7f;
+
+    // --- Continuous gyro-bias refresh (see App::refresh_bias_if_still_) ---
+    //
+    // Bias is captured once at zero-cal, but MPU6886 bias drifts with temperature
+    // and the stick warms up in use. ki only corrects while the accel is trusted,
+    // and steady mode lengthens the accel anchor, so the gyro carries more of the
+    // load between corrections than it used to.
+    //
+    // The danger is learning real rotation as bias, which is far worse than stale
+    // bias. Three guards: the gyro must be near zero, the accel must look like
+    // pure gravity, and both must hold for a sustained run of ticks.
+    constexpr float BIAS_STILL_GYRO_DPS   = 2.0f;   // below this counts as "not rotating"
+    constexpr float BIAS_STILL_ACCEL_TOL  = 0.05f;  // |a| this close to 1g = not accelerating
+    constexpr uint16_t BIAS_STILL_TICKS   = 25;     // 0.5 s at 50 Hz before trusting it
+    constexpr float BIAS_EMA_ALPHA        = 0.02f;  // slow: ~35 still-ticks per time constant
+    // Max accel-direction drift from the window-start anchor before the window
+    // is judged a slow rotation rather than rest (0.02 g ~ 1.15 deg). Stricter
+    // than zero_cal's hand-held gate on purpose: bias refresh should fire on a
+    // device at rest on the stone, not one merely held steadily.
+    constexpr float BIAS_STILL_DRIFT_TOL_G = 0.02f;
 
     // True when the filter's gravity estimate has drifted from a trustworthy raw
     // gravity reading while the device is held still — the cue to nudge_to_gravity().

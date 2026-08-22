@@ -18,7 +18,9 @@ enum class State : uint8_t {
     ZERO_CAL,                  // NEW
     ACTIVE,
     REZERO,                    // re-capture current side's zero from within ACTIVE
+    VERIFY,                    // check the reading against a known angle (accuracy check)
     SUMMARY,
+    HISTORY,                   // read-only list of past sessions, from SUMMARY
     FAULT,
     RESUME_PROMPT,
     SLEEP
@@ -56,6 +58,22 @@ enum class PresetSelection : uint8_t {
     P28,
     CANCEL
 };
+
+// One finished session, small enough to keep a handful in NVS.
+//
+// green_pct is the share of ACTIVE ticks spent in tolerance. Stroke count says
+// how much you did; this says how WELL — it is the number that should climb as
+// technique improves, which makes it the more useful one to keep.
+struct SessionRecord {
+    uint16_t target_deg_x10 = 0;    // 17.0 deg -> 170, avoids a float in NVS
+    uint8_t  tolerance      = 0;    // Tolerance enum value
+    uint8_t  green_pct      = 0;    // 0..100
+    uint16_t strokes_a      = 0;
+    uint16_t strokes_b      = 0;
+    uint16_t duration_s     = 0;
+};
+
+constexpr int kSessionHistoryMax = 5;
 
 enum class FaultCode : uint8_t {
     NONE = 0,
