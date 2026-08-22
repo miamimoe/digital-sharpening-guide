@@ -36,6 +36,40 @@ void App::apply_steady_() {
     filter_.set_accel_tau(steady_ ? mahony::ACCEL_LP_TAU_S : 0.0f);
 }
 
+void App::refresh_bias_if_still_(Vec3 accel_g, Vec3 gyro_dps) {
+    const float gyro_mag = std::sqrt(gyro_dps.x*gyro_dps.x +
+                                     gyro_dps.y*gyro_dps.y +
+                                     gyro_dps.z*gyro_dps.z);
+    const float a_mag    = std::sqrt(accel_g.x*accel_g.x +
+                                     accel_g.y*accel_g.y +
+                                     accel_g.z*accel_g.z);
+
+    // Both conditions must hold: near-zero rate AND pure gravity. Rate alone is
+    // not enough — a slow steady rotation also reads low, and absorbing that as
+    // bias would make the filter permanently wrong in the direction of the turn.
+    const bool looks_still = gyro_mag < mahony::BIAS_STILL_GYRO_DPS
+                          && std::fabs(a_mag - 1.0f) < mahony::BIAS_STILL_ACCEL_TOL;
+    if (!looks_still) {
+        bias_still_ticks_ = 0;
+        return;
+    }
+    if (bias_still_ticks_ < mahony::BIAS_STILL_TICKS) {
+        ++bias_still_ticks_;
+        return;                      // not yet convinced it is actually at rest
+    }
+
+    // Held still long enough: whatever the gyro still reads is bias, not motion.
+    Vec3 b = filter_.bias();
+    b.x += mahony::BIAS_EMA_ALPHA * (gyro_dps.x - b.x);
+    b.y += mahony::BIAS_EMA_ALPHA * (gyro_dps.y - b.y);
+    b.z += mahony::BIAS_EMA_ALPHA * (gyro_dps.z - b.z);
+    filter_.set_bias(b);
+    // Deliberately NOT persisted to NVS here. A refresh is only as good as the
+    // stillness detection that produced it; writing every session would let one
+    // bad estimate outlive the session that made it. Zero-cal remains the only
+    // thing that persists a bias.
+}
+
 static Tolerance next_tolerance(Tolerance t) {
     switch (t) {
         case Tolerance::TIGHT:  return Tolerance::NORMAL;
@@ -127,7 +161,32 @@ void App::transition(State to, uint32_t now_ms) {
         case State::SUMMARY: {
             uint32_t dur_s = (session_started_ms_ != 0 && now_ms >= session_started_ms_)
                              ? (now_ms - session_started_ms_) / 1000 : 0;
-            ui::draw_summary(target_deg_, tol_, strokes_a_, strokes_b_, dur_s);
+            // Persist the finished session exactly once, on entry to SUMMARY —
+            // not per stroke, which would wear out NVS for no benefit. Skip
+            // sessions with no ACTIVE time; they carry nothing worth keeping.
+            if (active_ticks_ > 0) {
+                SessionRecord r;
+                r.target_deg_x10 = (uint16_t)(target_deg_ * 10.0f + 0.5f);
+                r.tolerance      = (uint8_t)tol_;
+                r.green_pct      = green_pct();
+                r.strokes_a      = (uint16_t)strokes_a_;
+                r.strokes_b      = (uint16_t)strokes_b_;
+                r.duration_s     = (uint16_t)((dur_s > 65535u) ? 65535u : dur_s);
+                settings::push_session_record(r);
+            }
+            ui::draw_summary(target_deg_, tol_, strokes_a_, strokes_b_, dur_s, green_pct());
+            break;
+        }
+        case State::VERIFY:
+            ui::clear();
+            verify_captured_ = false;
+            zc_fsm_ = zero_cal::CaptureFSM{};   // IDLE until the user presses A
+            ui::draw_verify_prompt();
+            break;
+        case State::HISTORY: {
+            SessionRecord recs[kSessionHistoryMax];
+            int n = settings::load_session_history(recs, kSessionHistoryMax);
+            ui::draw_history(recs, n);
             break;
         }
         case State::FAULT:   ui::draw_fault(fault_code_); feedback::fault_led(); break;
@@ -295,6 +354,12 @@ void App::handle_set_target(const Tick& t) {
             // target_deg_ keeps its current value (default 17.0f or last preset).
             transition(State::SET_TOLERANCE, t.now_ms);
         }
+    } else if (t.input == InputEvent::A_LONG) {
+        // Accuracy check — "is this thing actually right?". Lives here because it
+        // is a pre-session question, and it is a long-press so nobody lands in it
+        // by accident on the way to sharpening.
+        transition(State::VERIFY, t.now_ms);
+        return;
     } else if (t.input == InputEvent::B_SHORT) {
         if (!in_preset_mode_) {
             in_preset_mode_   = true;
@@ -334,6 +399,7 @@ void App::handle_set_tolerance(const Tick& t) {
 
 void App::handle_active(const Tick& t) {
     filter_.update(t.gyro_dps, t.accel_g);
+    refresh_bias_if_still_(t.accel_g, t.gyro_dps);
     // Snap-to-raw recovery: when the device is verified still but the filter's
     // gravity estimate still lags (e.g. just after a side flip, or on the first
     // ACTIVE tick before Mahony has converged), re-anchor to the raw accel so the
@@ -355,6 +421,9 @@ void App::handle_active(const Tick& t) {
                               prev_color_,
                               (steady_ && color_valid_) ? CLASSIFY_HYSTERESIS_DEG : 0.0f);
     color_valid_ = true;
+
+    ++active_ticks_;
+    if (col == ColorState::GREEN) ++green_ticks_;
 
     // Horizontal linear acceleration = the stroke motion (gravity removed, then
     // the component in the stone plane). g_now is a unit vector, so accel - g_now
@@ -460,8 +529,13 @@ void App::handle_rezero(const Tick& t) {
 }
 
 void App::handle_summary(const Tick& t) {
+    if (t.input == InputEvent::B_LONG) {
+        transition(State::HISTORY, t.now_ms);
+        return;
+    }
     if (t.input == InputEvent::A_SHORT) {
         strokes_a_ = strokes_b_ = 0;
+        green_ticks_ = active_ticks_ = 0;
         session_started_ms_ = 0;
         session::clear();
         transition(State::SET_TARGET, t.now_ms);
@@ -470,9 +544,61 @@ void App::handle_summary(const Tick& t) {
         // A-long -> SUMMARY, so waking back into RESUME? would be wrong.
         session::clear();
         strokes_a_ = strokes_b_ = 0;
+        green_ticks_ = active_ticks_ = 0;
         session_started_ms_ = 0;
         transition(State::SLEEP, t.now_ms);
     }
+}
+
+void App::handle_verify(const Tick& t) {
+    // Accuracy check. Capture a flat reference, then read the live angle at 0.1
+    // deg against it, so the user can lay the device on a known angle (a printed
+    // wedge, an angle block) and see whether the number matches.
+    //
+    // This never touches g_flat_ or the session — checking accuracy must not cost
+    // you the zero you already set.
+    if (t.input == InputEvent::B_SHORT || t.input == InputEvent::A_LONG) {
+        ui::clear();
+        transition(State::SET_TARGET, t.now_ms);
+        return;
+    }
+
+    if (!verify_captured_) {
+        if (zc_fsm_.phase() == zero_cal::Phase::IDLE) {
+            if (t.input == InputEvent::A_SHORT) zc_fsm_.start();
+            else { ui::draw_verify_prompt(); return; }
+        }
+        zc_fsm_.update(t.accel_g, t.gyro_dps);
+        if (zc_fsm_.done()) {
+            verify_ref_      = normalized(zc_fsm_.result());
+            verify_captured_ = true;
+            filter_.nudge_to_gravity(t.accel_g);   // start from a known-good pose
+            ui::clear();
+        } else {
+            const int remaining = (zc_fsm_.warmup_remaining() + zc_fsm_.averaging_remaining())
+                                  * (int)kLoopTickMs;
+            ui::draw_verify_capture(remaining, zc_fsm_.moving());
+        }
+        return;
+    }
+
+    filter_.update(t.gyro_dps, t.accel_g);
+    if (snap_cooldown_ > 0) --snap_cooldown_;
+    else if (mahony::should_snap(filter_.gravity(), t.accel_g, t.gyro_dps)) {
+        filter_.nudge_to_gravity(t.accel_g);
+        snap_cooldown_ = mahony::SNAP_COOLDOWN_TICKS;
+    }
+    // No edge axis here: this is a total-tilt check against the flat reference,
+    // which is what a wedge or angle block presents. Passing a zero axis makes
+    // bevel_angle fall back to exactly that.
+    verify_reading_deg_ = bevel_angle(verify_ref_, {0.0f, 0.0f, 0.0f}, filter_.gravity());
+    if (t.input != InputEvent::NONE) last_activity_ms_ = t.now_ms;
+    ui::draw_verify_reading(verify_reading_deg_);
+}
+
+void App::handle_history(const Tick& t) {
+    // Any press returns. A read-only screen should not need a legend to leave.
+    if (t.input != InputEvent::NONE) transition(State::SUMMARY, t.now_ms);
 }
 
 void App::handle_resume_prompt(const Tick& t) {
@@ -513,7 +639,9 @@ void App::on_tick(const Tick& t) {
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
         case State::ACTIVE:        handle_active(t); break;
         case State::REZERO:        handle_rezero(t); break;
+        case State::VERIFY:        handle_verify(t); break;
         case State::SUMMARY:       handle_summary(t); break;
+        case State::HISTORY:       handle_history(t); break;
         case State::RESUME_PROMPT: handle_resume_prompt(t); break;
         case State::FAULT:         break;
         case State::SLEEP:         break;

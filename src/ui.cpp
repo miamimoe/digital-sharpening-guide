@@ -23,6 +23,11 @@ namespace {
     char           s_last_angle[12] = "";
     bool           s_last_angle_valid = false;
 
+    // Last VERIFY reading rendered, so the 0.1 deg readout repaints only on
+    // change and the static header is drawn once per entry.
+    char           s_last_verify[12]   = "";
+    bool           s_last_verify_valid = false;
+
     // Currently-shown angle, held against sub-degree chatter in steady mode
     // (see draw_active). Distinct from s_last_angle, which is the rendered text
     // used for dirty-region suppression.
@@ -82,13 +87,14 @@ void clear() {
     s_last_angle_valid = false;
     s_last_zc_tenths_valid = false;
     s_shown_valid = false;
+    s_last_verify_valid = false;
 }
 
 void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v0.3.0-beta.1", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v0.3.0-beta.2", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -212,20 +218,110 @@ void draw_active(const ActiveView& v) {
     s_last_valid = true;
 }
 
-void draw_summary(float target_deg, Tolerance tol, uint32_t a, uint32_t b, uint32_t duration_s) {
+void draw_summary(float target_deg, Tolerance tol, uint32_t a, uint32_t b,
+                  uint32_t duration_s, uint8_t green_pct) {
     clear();
     draw_centered("SESSION", 4, 2, COL_WHITE, COL_BLACK);
     const char* t = (tol == Tolerance::TIGHT) ? "T2" : (tol == Tolerance::NORMAL) ? "N3" : "E5";
     char buf[48];
     M5.Display.setTextColor(COL_WHITE, COL_BLACK);
     M5.Display.setTextSize(2);
-    std::snprintf(buf, sizeof buf, "Target: %d", (int)target_deg);
-    M5.Display.setCursor(12, 32);  M5.Display.print(buf);
-    std::snprintf(buf, sizeof buf, "Tol: %s   A:%u  B:%u", t, (unsigned)a, (unsigned)b);
-    M5.Display.setCursor(12, 56);  M5.Display.print(buf);
+    std::snprintf(buf, sizeof buf, "Target: %d  %s", (int)target_deg, t);
+    M5.Display.setCursor(12, 30);  M5.Display.print(buf);
+    std::snprintf(buf, sizeof buf, "A:%u  B:%u", (unsigned)a, (unsigned)b);
+    M5.Display.setCursor(12, 52);  M5.Display.print(buf);
+    // Time on-angle, in green, because it is the score that should improve.
+    M5.Display.setTextColor(COL_GREEN, COL_BLACK);
+    std::snprintf(buf, sizeof buf, "On-angle %u%%", (unsigned)green_pct);
+    M5.Display.setCursor(12, 74);  M5.Display.print(buf);
+    M5.Display.setTextColor(COL_WHITE, COL_BLACK);
+    M5.Display.setTextSize(1);
     std::snprintf(buf, sizeof buf, "Time %02u:%02u", (unsigned)(duration_s/60), (unsigned)(duration_s%60));
-    M5.Display.setCursor(12, 80);  M5.Display.print(buf);
-    draw_centered("A:New   B:Sleep", 118, 1, COL_WHITE, COL_BLACK);
+    M5.Display.setCursor(12, 98);  M5.Display.print(buf);
+    draw_centered("A:New  B:Sleep  B-hold:Past", 118, 1, COL_WHITE, COL_BLACK);
+}
+
+void draw_verify_prompt() {
+    clear();
+    draw_centered("ACCURACY CHECK", 8, 2, COL_WHITE, COL_BLACK);
+    draw_centered("Lay it flat on the stone", 42, 1, COL_WHITE, COL_BLACK);
+    draw_centered("(or any flat surface),", 56, 1, COL_WHITE, COL_BLACK);
+    draw_centered("press A, hold still.", 70, 1, COL_WHITE, COL_BLACK);
+    draw_centered("Then tilt to a known angle.", 90, 1, COL_WHITE, COL_BLACK);
+    draw_centered("A:Start   B:Back", 118, 1, COL_WHITE, COL_BLACK);
+}
+
+void draw_verify_capture(int remaining_ms, bool moving) {
+    // Same 10 Hz throttle as the zero-cal countdown: repaint only when the tenths
+    // digit or the moving state actually changes.
+    int tenths = remaining_ms / 100;
+    if (tenths < 0) tenths = 0;
+    if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths && moving == s_last_zc_moving) return;
+    s_last_zc_tenths       = tenths;
+    s_last_zc_tenths_valid = true;
+    s_last_zc_moving       = moving;
+
+    M5.Display.fillScreen(COL_BLACK);
+    draw_centered("ACCURACY CHECK", 8, 2, COL_WHITE, COL_BLACK);
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%d.%d", tenths / 10, tenths % 10);
+    draw_centered(buf, 48, 4, COL_WHITE, COL_BLACK);
+    draw_centered(moving ? "KEEP STILL" : "Hold still...", 100, 1,
+                  moving ? COL_RED : COL_WHITE, COL_BLACK);
+}
+
+void draw_verify_reading(float deg) {
+    // 0.1 deg here, deliberately unlike the whole-degree ACTIVE readout: this is
+    // the one screen where you WANT the extra digit, because you are comparing
+    // against an external reference rather than trying to hold a value steady.
+    char buf[12];
+    std::snprintf(buf, sizeof buf, "%.1f", (double)deg);
+    if (s_last_verify_valid && std::strcmp(buf, s_last_verify) == 0) return;
+
+    if (!s_last_verify_valid) {
+        M5.Display.fillScreen(COL_BLACK);
+        draw_centered("ACCURACY CHECK", 8, 2, COL_WHITE, COL_BLACK);
+        draw_centered("Compare with your reference", 104, 1, COL_WHITE, COL_BLACK);
+        draw_centered("A-hold or B: done", 120, 1, COL_WHITE, COL_BLACK);
+    }
+    M5.Display.fillRect(0, 40, SCR_W, 8 * 6, COL_BLACK);
+    draw_centered(buf, 46, 6, COL_WHITE, COL_BLACK);
+    std::strncpy(s_last_verify, buf, sizeof s_last_verify - 1);
+    s_last_verify[sizeof s_last_verify - 1] = '\0';
+    s_last_verify_valid = true;
+}
+
+void draw_history(const SessionRecord* recs, int count) {
+    clear();
+    draw_centered("PAST SESSIONS", 4, 2, COL_WHITE, COL_BLACK);
+    if (count <= 0) {
+        draw_centered("Nothing yet -", 52, 1, COL_WHITE, COL_BLACK);
+        draw_centered("finish a session first.", 66, 1, COL_WHITE, COL_BLACK);
+        draw_centered("Any button: back", 118, 1, COL_WHITE, COL_BLACK);
+        return;
+    }
+    // Newest first, one row each. Columns: angle, on-angle %, strokes, time.
+    M5.Display.setTextSize(1);
+    M5.Display.setTextColor(COL_WHITE, COL_BLACK);
+    M5.Display.setCursor(8, 26);
+    M5.Display.print("ANGLE  ON-ANGLE  STROKES   TIME");
+    char buf[48];
+    for (int i = 0; i < count && i < kSessionHistoryMax; i++) {
+        const SessionRecord& r = recs[i];
+        const int y = 40 + i * 15;
+        std::snprintf(buf, sizeof buf, "%4.1f%c    %3u%%     %5u   %02u:%02u",
+                      (double)r.target_deg_x10 / 10.0, 0xF8 /* degree glyph */,
+                      (unsigned)r.green_pct,
+                      (unsigned)(r.strokes_a + r.strokes_b),
+                      (unsigned)(r.duration_s / 60), (unsigned)(r.duration_s % 60));
+        // Newest row highlighted so "this one is the session you just finished"
+        // reads without counting rows.
+        M5.Display.setTextColor(i == 0 ? COL_GREEN : COL_WHITE, COL_BLACK);
+        M5.Display.setCursor(8, y);
+        M5.Display.print(buf);
+    }
+    M5.Display.setTextColor(COL_WHITE, COL_BLACK);
+    draw_centered("Any button: back", 122, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_fault(FaultCode code) {
@@ -307,7 +403,11 @@ namespace ui {
     void draw_set_target(float, bool, PresetSelection) {}
     void draw_set_tolerance(Tolerance, bool) {}
     void draw_active(const ActiveView&) {}
-    void draw_summary(float, Tolerance, uint32_t, uint32_t, uint32_t) {}
+    void draw_summary(float, Tolerance, uint32_t, uint32_t, uint32_t, uint8_t) {}
+    void draw_history(const SessionRecord*, int) {}
+    void draw_verify_prompt() {}
+    void draw_verify_capture(int, bool) {}
+    void draw_verify_reading(float) {}
     void draw_fault(FaultCode) {}
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
     void draw_zero_cal_prompt(int, bool) {}

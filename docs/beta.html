@@ -77,7 +77,7 @@
 </head>
 <body>
   <div class="wrap">
-    <span class="beta-tag">Beta · v0.3.0-beta.1</span>
+    <span class="beta-tag">Beta · v0.3.0-beta.2</span>
     <h1>Steady mode</h1>
     <p class="sub">A test build that goes after the jittery angle reading. Not linked from the main flasher and not a release — flash it, sharpen with it, and tell me whether the number actually sits still.</p>
 
@@ -108,7 +108,7 @@
         <span slot="unsupported" class="unsupported">Your browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
         <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) connection.</span>
       </esp-web-install-button>
-      <p class="note center" style="margin-top:16px;">Desktop Chrome / Edge / Opera, USB-C <em>data</em> cable. Splash should read <code>v0.3.0-beta.1</code>.</p>
+      <p class="note center" style="margin-top:16px;">Desktop Chrome / Edge / Opera, USB-C <em>data</em> cable. Splash should read <code>v0.3.0-beta.2</code>.</p>
     </div>
 
     <div class="panel">
@@ -139,6 +139,7 @@
         <li>Turn it <strong>OFF</strong> and sharpen the same way again.</li>
         <li>Tell me: is the number calmer? Does the colour still change fast enough to be useful, or does it feel late?</li>
       </ol>
+      <p class="note" style="margin:12px 0 10px"><strong>Also new in this build:</strong> an <strong>accuracy check</strong> (hold <strong>A</strong> on SET TARGET — lay it flat, press A, then stand it on a known angle; there are <a href="angle-check.html">printable wedges</a> if you don't own an angle block), <strong>time on-angle</strong> on the summary screen, and your <strong>last five sessions</strong> (hold <strong>B</strong> on the summary).</p>
       <p class="note" style="margin-bottom:0"><strong>The risk to watch for is lag.</strong> Smoothing always trades response for calm. If green now feels like it arrives after you have already found the angle, say so — the time constant is one number and easy to back off.</p>
     </div>
 

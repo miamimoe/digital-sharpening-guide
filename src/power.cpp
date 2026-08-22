@@ -20,11 +20,17 @@ IdleConfig config_for(State s) {
         // last_activity_ms_ while the capture FSM is progressing or the user is
         // handling the device, so only an abandoned static screen idles out.
         case State::REZERO:         return { 60000, 120000};
+        // Accuracy check: the user is fiddling with a reference block, so give it
+        // the same generous budget as a capture rather than a reading screen.
+        case State::VERIFY:         return { 60000, 120000};
         case State::FAULT:          return { 60000, 300000};
         case State::SET_TARGET:     return { 90000, 120000};
         case State::SET_TOLERANCE:  return { 60000,  90000};
         case State::ACTIVE:         return {180000, 300000}; // strokes-or-activity-based
         case State::SUMMARY:        return { 60000,  90000};
+        // Same budget as SUMMARY: a static read-only screen the user is looking
+        // at, not one they are working against.
+        case State::HISTORY:        return { 60000,  90000};
     }
     __builtin_unreachable();
 }

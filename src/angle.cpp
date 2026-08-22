@@ -67,10 +67,15 @@ float bevel_angle(Vec3 g_flat, Vec3 edge_axis, Vec3 g_now) {
         pn = n;
     }
 
-    float d = dot(pf, pn);
-    if (d >  1.0f) d =  1.0f;
-    if (d < -1.0f) d = -1.0f;
-    float deg = std::acos(d) * (180.0f / (float)M_PI);   // 0..180
+    // atan2(|a x b|, a.b) rather than acos(a.b): acos loses precision badly as the
+    // dot product approaches +/-1, where float32 puts a resolution floor around
+    // 0.04 deg. At a working bevel of 15-25 deg that is not a meaningful error,
+    // but it matters for the near-flat cases (verifying the zero, checking a flat
+    // reference) and it costs nothing. The sine term carries the precision where
+    // the cosine term has none.
+    Vec3 c   = cross(pf, pn);
+    float s  = std::sqrt(dot(c, c));
+    float deg = std::atan2(s, dot(pf, pn)) * (180.0f / (float)M_PI);   // 0..180
     // Fold the flipped blade face (gravity in the opposite hemisphere) into 0..90,
     // so one capture serves both sides.
     if (deg > 90.0f) deg = 180.0f - deg;

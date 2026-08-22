@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Printable angle wedges — Digital Sharpening Guide</title>
+  <meta name="description" content="Print-at-home reference wedges for checking the Digital Sharpening Guide's angle reading against a known angle." />
+  <style>
+    :root { --ink: #111; --muted: #666; --line: #bbb; --accent: #b35309; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink); background: #fff; line-height: 1.5;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    .steps { background: #f5f5f3; border-radius: 10px; padding: 16px 20px; margin-bottom: 22px; }
+    .steps ol { margin: 0; padding-left: 20px; }
+    .steps li { margin-bottom: 6px; }
+    .scale-check {
+      border: 2px solid var(--accent); border-radius: 10px;
+      padding: 14px 18px; margin-bottom: 26px;
+    }
+    .scale-check strong { color: var(--accent); }
+    .ruler { margin-top: 10px; }
+    .wedge { page-break-inside: avoid; margin-bottom: 14px; }
+    .wedge h2 { font-size: 1rem; margin: 0 0 4px; }
+    .note { color: var(--muted); font-size: 0.85rem; }
+    svg { display: block; max-width: 100%; height: auto; }
+    .print-hint { margin: 22px 0; }
+    button {
+      background: var(--ink); color: #fff; border: 0; border-radius: 8px;
+      padding: 10px 18px; font-size: 1rem; cursor: pointer;
+    }
+    @media print {
+      body { padding: 0; }
+      .noprint { display: none !important; }
+      .wedge { margin-bottom: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Printable angle wedges</h1>
+    <p class="sub">For the <strong>accuracy check</strong> on the Digital Sharpening Guide — hold <strong>A</strong> on the SET TARGET screen. Print this page, cut out a wedge, and see whether the device agrees with it.</p>
+
+    <div class="scale-check">
+      <strong>About printer scaling.</strong> Good news: an angle survives uniform scaling, so "Fit to page" does <em>not</em> change what these wedges measure — a 17° triangle is still 17° at any size. Print at <strong>100% / "Actual size"</strong> anyway, so the sloped face is long enough to rest the device on without it overhanging. The bar below should measure 100&nbsp;mm at 100%; if it comes out shorter, your wedges are just smaller, not wrong.
+      <svg class="ruler" viewBox="0 0 400 46" width="400" height="46" role="img" aria-label="A 100 millimetre calibration bar with 10 millimetre divisions.">
+        <line x1="10" y1="26" x2="388" y2="26" stroke="#111" stroke-width="1.5"/>
+        <g stroke="#111" stroke-width="1.5">
+          <line x1="10"    y1="14" x2="10"    y2="38"/>
+          <line x1="47.8"  y1="20" x2="47.8"  y2="32"/>
+          <line x1="85.6"  y1="20" x2="85.6"  y2="32"/>
+          <line x1="123.4" y1="20" x2="123.4" y2="32"/>
+          <line x1="161.2" y1="20" x2="161.2" y2="32"/>
+          <line x1="199"   y1="14" x2="199"   y2="38"/>
+          <line x1="236.8" y1="20" x2="236.8" y2="32"/>
+          <line x1="274.6" y1="20" x2="274.6" y2="32"/>
+          <line x1="312.4" y1="20" x2="312.4" y2="32"/>
+          <line x1="350.2" y1="20" x2="350.2" y2="32"/>
+          <line x1="388"   y1="14" x2="388"   y2="38"/>
+        </g>
+        <text x="10"  y="10" font-size="10" text-anchor="middle" fill="#111">0</text>
+        <text x="199" y="10" font-size="10" text-anchor="middle" fill="#111">50 mm</text>
+        <text x="388" y="10" font-size="10" text-anchor="middle" fill="#111">100</text>
+      </svg>
+    </div>
+
+    <div class="steps">
+      <ol>
+        <li>Print at 100% (see the note above about scaling).</li>
+        <li>Cut out a wedge along its outline. Cut <em>accurately</em> — over a 160 mm face, 1.5&nbsp;mm of wobble is about half a degree.</li>
+        <li>Glue or tape it to something rigid (cardboard, a cereal box) so it doesn't flex.</li>
+        <li>On the device: SET TARGET → <strong>hold A</strong> → lay it flat, press <strong>A</strong>, hold still.</li>
+        <li>Stand the device on the wedge's sloped face and read the number.</li>
+      </ol>
+      <p class="note" style="margin:8px 0 0">Within ±0.5° of the printed angle is a good result for a paper reference. If it's off by several degrees, re-do the flat capture on a surface you trust is actually flat — a kitchen counter is usually better than a whetstone.</p>
+    </div>
+
+    <div class="print-hint noprint"><button onclick="window.print()">Print this page</button></div>
+
+    <!-- Wedges. Each is a right triangle whose height is base * tan(angle), so
+         the printed slope is the stated angle to within 0.02 deg. Angles are
+         scale-invariant, so print scaling changes the size but not the angle. -->
+    <div class="wedge">
+      <h2>15° — typical Japanese kitchen knife</h2>
+      <svg viewBox="0 0 620 174" role="img" aria-label="A right triangle wedge with a 15 degree slope.">
+        <polygon points="10,164 615,164 10,2" fill="none" stroke="#111" stroke-width="1.5"/>
+        <text x="150" y="120" font-size="16" fill="#111">15°</text>
+        <text x="360" y="157" font-size="11" fill="#666">cut along the outline</text>
+      </svg>
+    </div>
+
+    <div class="wedge">
+      <h2>17° — the firmware default</h2>
+      <svg viewBox="0 0 620 197" role="img" aria-label="A right triangle wedge with a 17 degree slope.">
+        <polygon points="10,187 615,187 10,2" fill="none" stroke="#111" stroke-width="1.5"/>
+        <text x="150" y="140" font-size="16" fill="#111">17°</text>
+        <text x="360" y="180" font-size="11" fill="#666">cut along the outline</text>
+      </svg>
+    </div>
+
+    <div class="wedge">
+      <h2>20° — typical Western kitchen knife</h2>
+      <svg viewBox="0 0 620 232" role="img" aria-label="A right triangle wedge with a 20 degree slope.">
+        <polygon points="10,222 615,222 10,2" fill="none" stroke="#111" stroke-width="1.5"/>
+        <text x="150" y="165" font-size="16" fill="#111">20°</text>
+        <text x="360" y="215" font-size="11" fill="#666">cut along the outline</text>
+      </svg>
+    </div>
+
+    <div class="wedge">
+      <h2>25° — Chinese cleaver / heavier edge</h2>
+      <svg viewBox="0 0 620 294" role="img" aria-label="A right triangle wedge with a 25 degree slope.">
+        <polygon points="10,284 615,284 10,2" fill="none" stroke="#111" stroke-width="1.5"/>
+        <text x="150" y="215" font-size="16" fill="#111">25°</text>
+        <text x="360" y="277" font-size="11" fill="#666">cut along the outline</text>
+      </svg>
+    </div>
+
+    <p class="note noprint">A paper wedge is good to roughly half a degree if you cut carefully. If you own a machinist's angle block or an adjustable bevel gauge, use that instead — it will beat this by a wide margin.</p>
+  </div>
+</body>
+</html>

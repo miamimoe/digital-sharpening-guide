@@ -24,13 +24,18 @@ public:
     Tolerance tolerance()        const { return tol_; }
     bool      buzzer_on()        const { return buzzer_on_; }
     bool      steady_on()        const { return steady_; }
+    Vec3      gyro_bias()        const { return filter_.bias(); }
     uint32_t  strokes_a()        const { return strokes_a_; }
     uint32_t  strokes_b()        const { return strokes_b_; }
+    uint8_t   green_pct()        const {
+        return active_ticks_ ? (uint8_t)((green_ticks_ * 100u) / active_ticks_) : 0u;
+    }
     Side      current_side()     const { return side_fsm_.current_side(); }
     uint32_t  last_activity_ms() const { return last_activity_ms_; }
     uint32_t  last_stroke_ms()   const { return last_stroke_ms_; }
     ZeroCalSubstate  zero_cal_substate() const { return zc_substate_; }
     Vec3             g_flat()            const { return g_flat_; }
+    float            verify_reading_deg() const { return verify_reading_deg_; }
     Vec3             edge_axis()         const { return edge_axis_; }
 
 private:
@@ -43,7 +48,9 @@ private:
     void handle_set_tolerance   (const Tick& t);
     void handle_active          (const Tick& t);
     void handle_rezero          (const Tick& t);
+    void handle_verify          (const Tick& t);
     void handle_summary         (const Tick& t);
+    void handle_history         (const Tick& t);
     void handle_resume_prompt   (const Tick& t);
 
     State            state_                = State::BOOT;
@@ -59,6 +66,9 @@ private:
     bool             steady_               = true;
 
     void apply_steady_();   // push steady_ into the filter's accel time constant
+    // Nudge the gyro bias toward the measured rate whenever the device is
+    // genuinely still, so thermal drift does not accumulate across a session.
+    void refresh_bias_if_still_(Vec3 accel_g, Vec3 gyro_dps);
     Vec3             g_flat_               = {0.0f, 0.0f, 0.0f};  // flat-on-stone reference
     Vec3             edge_axis_            = {0.0f, 0.0f, 0.0f};  // cutting-edge / hinge axis
 
@@ -73,12 +83,26 @@ private:
     // after a snap fires (see handle_active).
     uint8_t          snap_cooldown_        = 0;
 
+    // VERIFY: a flat reference captured just for the accuracy check, kept
+    // separate from g_flat_ so checking never disturbs a live session's zero.
+    Vec3             verify_ref_           = {0.0f, 0.0f, 0.0f};
+    bool             verify_captured_      = false;
+    float            verify_reading_deg_   = 0.0f;   // last VERIFY readout
+
+    // Consecutive ticks the device has looked still, for the bias refresh.
+    uint16_t         bias_still_ticks_     = 0;
+
     // Last whole-second value rendered for a countdown screen (RESUME_PROMPT)
     // so it repaints once per second instead of every tick.
     int              last_countdown_sec_   = -1;
 
     uint32_t         strokes_a_            = 0;
     uint32_t         strokes_b_            = 0;
+
+    // Share of ACTIVE ticks spent in tolerance. Strokes measure effort;
+    // this measures technique, and it is what should improve over time.
+    uint32_t         green_ticks_          = 0;
+    uint32_t         active_ticks_         = 0;
     uint32_t         session_started_ms_   = 0;
 
     bool             in_preset_mode_       = false;

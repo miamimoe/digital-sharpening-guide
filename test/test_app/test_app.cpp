@@ -39,6 +39,7 @@ void setUp(void) {
     settings::save_tolerance(Tolerance::NORMAL);
     settings::save_buzzer(false);
     session::clear();
+    settings::clear_session_history();   // keep tests order-independent
 }
 void tearDown(void) {}
 
@@ -188,6 +189,196 @@ void test_preset_cancel_returns_to_live_capture(void) {
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
     advance(a, t, 100, InputEvent::A_SHORT);
     TEST_ASSERT_EQUAL_INT((int)State::SET_TOLERANCE, (int)a.current());
+}
+
+// --- VERIFY (accuracy check) ---
+
+void test_set_target_a_long_opens_verify(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_LONG);
+    TEST_ASSERT_EQUAL_INT((int)State::VERIFY, (int)a.current());
+}
+
+void test_verify_b_returns_without_starting_a_session(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_LONG);
+    advance(a, t, 100, InputEvent::B_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
+}
+
+void test_verify_reads_a_known_tilt_after_capture(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> VERIFY
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});   // start capture
+    drive_still(a, t, {0.0f, 0.0f, -1.0f});                        // flat reference
+    TEST_ASSERT_EQUAL_INT((int)State::VERIFY, (int)a.current());
+    // Now present a known 17 deg tilt and let the filter settle on it.
+    advance(a, t, 4000, InputEvent::NONE, g_now_at_target_17);
+    TEST_ASSERT_FLOAT_WITHIN(1.5f, 17.0f, a.verify_reading_deg());
+}
+
+void test_verify_does_not_disturb_an_existing_zero(void) {
+    // Checking accuracy must not cost you the zero you already set.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    const Vec3 before = a.g_flat();
+    advance(a, t, 100, InputEvent::A_LONG);          // ACTIVE -> SUMMARY
+    advance(a, t, 100, InputEvent::A_SHORT);         // -> SET_TARGET
+    advance(a, t, 100, InputEvent::A_LONG);          // -> VERIFY
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.3f, -0.95f});
+    drive_still(a, t, {0.0f, 0.3f, -0.95f});         // capture a DIFFERENT reference
+    TEST_ASSERT_EQUAL_FLOAT(before.x, a.g_flat().x);
+    TEST_ASSERT_EQUAL_FLOAT(before.y, a.g_flat().y);
+    TEST_ASSERT_EQUAL_FLOAT(before.z, a.g_flat().z);
+}
+
+void test_inverted_mount_reads_the_same_angle(void) {
+    // Reversed/left-handed mount. bevel_angle() folds gravity in the opposite
+    // hemisphere back into 0..90, so an upside-down device should report the same
+    // bevel as an upright one. This pins that end-to-end through the app, so the
+    // property cannot regress unnoticed.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 3000, InputEvent::NONE, g_now_at_target_17);
+    const uint8_t upright_green = a.green_pct();
+
+    App b;
+    uint32_t t2 = 0;
+    reach_active(b, t2);
+    const Vec3 inverted = { -g_now_at_target_17.x, -g_now_at_target_17.y, -g_now_at_target_17.z };
+    advance(b, t2, 3000, InputEvent::NONE, inverted);
+    // Both should sit in tolerance: the fold makes the flipped pose read 17 deg.
+    TEST_ASSERT_TRUE(upright_green > 50);
+    TEST_ASSERT_TRUE(b.green_pct() > 50);
+}
+
+// --- Session history + time-on-angle ---
+
+void test_green_pct_counts_time_in_tolerance(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    // Half the ticks on target (17 deg), half well off it.
+    advance(a, t, 2000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 2000, InputEvent::NONE, {0.0f, 0.0f, -1.0f});   // 0 deg = way low
+    TEST_ASSERT_TRUE(a.green_pct() > 25);
+    TEST_ASSERT_TRUE(a.green_pct() < 75);
+}
+
+void test_green_pct_is_zero_with_no_active_ticks(void) {
+    // Must not divide by zero before ACTIVE has run.
+    App a;
+    a.begin(false);
+    TEST_ASSERT_EQUAL_UINT8(0, a.green_pct());
+}
+
+void test_finished_session_is_recorded(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 2000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // ACTIVE -> SUMMARY
+    TEST_ASSERT_EQUAL_INT((int)State::SUMMARY, (int)a.current());
+
+    SessionRecord recs[kSessionHistoryMax];
+    int n = settings::load_session_history(recs, kSessionHistoryMax);
+    TEST_ASSERT_EQUAL_INT(1, n);
+    TEST_ASSERT_EQUAL_UINT16(170, recs[0].target_deg_x10);   // 17.0 deg
+    TEST_ASSERT_TRUE(recs[0].green_pct > 0);
+}
+
+void test_history_keeps_newest_first_and_caps_at_five(void) {
+    for (int i = 0; i < 7; i++) {
+        SessionRecord r;
+        r.target_deg_x10 = (uint16_t)(100 + i);   // distinguishable per push
+        settings::push_session_record(r);
+    }
+    SessionRecord recs[kSessionHistoryMax];
+    int n = settings::load_session_history(recs, kSessionHistoryMax);
+    TEST_ASSERT_EQUAL_INT(kSessionHistoryMax, n);
+    TEST_ASSERT_EQUAL_UINT16(106, recs[0].target_deg_x10);   // newest first
+    TEST_ASSERT_EQUAL_UINT16(102, recs[4].target_deg_x10);   // oldest kept
+}
+
+void test_summary_b_long_opens_history_and_any_press_returns(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 500, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> SUMMARY
+    advance(a, t, 100, InputEvent::B_LONG);          // -> HISTORY
+    TEST_ASSERT_EQUAL_INT((int)State::HISTORY, (int)a.current());
+    advance(a, t, 100, InputEvent::A_SHORT);         // any press returns
+    TEST_ASSERT_EQUAL_INT((int)State::SUMMARY, (int)a.current());
+}
+
+void test_new_session_from_summary_resets_green_stats(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 1000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> SUMMARY
+    advance(a, t, 100, InputEvent::A_SHORT);         // -> SET_TARGET (new session)
+    TEST_ASSERT_EQUAL_UINT8(0, a.green_pct());
+}
+
+// --- Continuous gyro-bias refresh ---
+
+void test_bias_converges_toward_offset_when_held_still(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    // A steady 1 dps reading on a device that is genuinely at rest IS bias.
+    const Vec3 offset = {1.0f, 0.0f, 0.0f};
+    advance(a, t, 6000, InputEvent::NONE, {0.0f, 0.0f, -1.0f}, offset);
+    TEST_ASSERT_TRUE(a.gyro_bias().x > 0.3f);      // it learned it
+    TEST_ASSERT_TRUE(a.gyro_bias().x <= 1.0f);     // and did not overshoot
+}
+
+void test_bias_ignores_a_slow_steady_rotation(void) {
+    // THE failure mode that matters. A device turning slowly reads a low but
+    // non-zero rate; absorbing that as bias would make the filter permanently
+    // wrong in the direction of the turn. 5 dps is slow — and must be rejected.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 6000, InputEvent::NONE, {0.0f, 0.0f, -1.0f}, {5.0f, 0.0f, 0.0f});
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, a.gyro_bias().x);
+}
+
+void test_bias_ignores_ticks_while_accelerating(void) {
+    // Gyro quiet but the device is being moved: |a| is not 1 g, so it is not at
+    // rest and the gyro reading is not necessarily bias.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 6000, InputEvent::NONE, {0.0f, 0.4f, -1.0f}, {1.0f, 0.0f, 0.0f});
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, a.gyro_bias().x);
+}
+
+void test_bias_requires_a_sustained_still_run(void) {
+    // A brief pause must not be enough — stillness has to hold for BIAS_STILL_TICKS
+    // before anything is learned, or hand tremor between strokes would qualify.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    // Break any still run already accumulated on entry to ACTIVE, so this
+    // measures the short run below and nothing else.
+    advance(a, t, 200, InputEvent::NONE, {0.0f, 0.0f, -1.0f}, {50.0f, 0.0f, 0.0f});
+    // 20 ticks of stillness — under BIAS_STILL_TICKS (25), so nothing is learned.
+    advance(a, t, 200, InputEvent::NONE, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f, 0.0f});
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, a.gyro_bias().x);
 }
 
 void test_tolerance_b_long_toggles_steady_without_advancing(void) {
@@ -417,6 +608,21 @@ int main(int, char**) {
     RUN_TEST(test_set_target_b_enters_preset_mode_and_cycles);
     RUN_TEST(test_preset_cycles_to_25_and_28);
     RUN_TEST(test_preset_cancel_returns_to_live_capture);
+    RUN_TEST(test_set_target_a_long_opens_verify);
+    RUN_TEST(test_verify_b_returns_without_starting_a_session);
+    RUN_TEST(test_verify_reads_a_known_tilt_after_capture);
+    RUN_TEST(test_verify_does_not_disturb_an_existing_zero);
+    RUN_TEST(test_inverted_mount_reads_the_same_angle);
+    RUN_TEST(test_green_pct_counts_time_in_tolerance);
+    RUN_TEST(test_green_pct_is_zero_with_no_active_ticks);
+    RUN_TEST(test_finished_session_is_recorded);
+    RUN_TEST(test_history_keeps_newest_first_and_caps_at_five);
+    RUN_TEST(test_summary_b_long_opens_history_and_any_press_returns);
+    RUN_TEST(test_new_session_from_summary_resets_green_stats);
+    RUN_TEST(test_bias_converges_toward_offset_when_held_still);
+    RUN_TEST(test_bias_ignores_a_slow_steady_rotation);
+    RUN_TEST(test_bias_ignores_ticks_while_accelerating);
+    RUN_TEST(test_bias_requires_a_sustained_still_run);
     RUN_TEST(test_tolerance_b_long_toggles_steady_without_advancing);
     RUN_TEST(test_tolerance_b_long_does_not_change_tolerance);
     RUN_TEST(test_tolerance_a_confirms_and_advances);

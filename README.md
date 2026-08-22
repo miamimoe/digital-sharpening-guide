@@ -42,9 +42,27 @@ A sharpening stroke pushes the blade **sideways**, and the filter's guard agains
 
 **You can switch it on and off on the device** — hold **B** on the TOLERANCE screen — so you can compare it against the old behaviour on the same knife, same stone, in the same session.
 
+The beta also adds three things worth trying:
+
+- **Accuracy check** — hold **A** on SET TARGET. Lay the device flat, press **A**, then stand it on a known angle and read the number at 0.1°. Answers "is this thing actually right?" in about twenty seconds. There are [printable wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) if you don't own an angle block.
+- **Time on-angle** — the session summary now shows what share of the session you held inside tolerance. Stroke count says how much you did; this says how well, and it's the number that should climb as your technique does.
+- **Past sessions** — hold **B** on the summary screen for your last five.
+
 [**🧪 Flash the beta →**](https://miamimoe.github.io/digital-sharpening-guide/beta.html) · it hasn't run on real hardware yet, which is the whole reason it's a beta. The [normal flasher](https://miamimoe.github.io/digital-sharpening-guide/) puts the stable release back whenever you want.
 
 **What would help most:** does the number actually sit still, and does green still arrive *fast enough*? Smoothing always trades response for calm — if green now feels late, that's the thing worth telling me. [Open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues) either way.
+
+---
+
+## It doesn't care how you stuck it on
+
+This is the part that makes the number trustworthy, and it's easy to miss because it looks like setup friction.
+
+Most digital angle gauges measure **raw tilt**. Stick one on a blade even slightly skewed — rotated a few degrees toward the tip — and the number is wrong, with nothing on screen to tell you. You'd have to notice by feel.
+
+The two-step calibration captures a flat reference *and* the cutting edge's hinge axis, then measures the bevel as rotation **about that axis**. Lengthwise skew drops out of the maths entirely. A crooked mount reads the same as a straight one, and one calibration serves both faces of the blade — flip the knife, keep sharpening.
+
+That's why there are two steps instead of one. It's not setup; it's the reason the reading means something.
 
 ---
 
@@ -52,7 +70,7 @@ A sharpening stroke pushes the blade **sideways**, and the filter's guard agains
 
 This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
-- It tells you where your angle is; **you** still do the sharpening. A bad reading won't cut you, but don't trust it blindly on an expensive knife until you've sanity-checked it against a protractor or a marker-on-the-bevel test.
+- It tells you where your angle is; **you** still do the sharpening. Don't trust it blindly on an expensive knife until you've checked it — the beta has a built-in **accuracy check** (hold **A** on SET TARGET) and there are [printable angle wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) to check it against.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
 - Mind the edge: you're handling a sharp knife near a small electronic device. Go slow the first few passes.
 
