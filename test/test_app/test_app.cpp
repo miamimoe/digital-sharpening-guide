@@ -55,6 +55,23 @@ static void reach_active(App& a, uint32_t& t) {
     advance(a, t, 100, InputEvent::A_SHORT);        // RESUME_PROMPT -> ACTIVE
 }
 
+void test_non_wake_boot_clears_stale_session(void) {
+    // Crash / EN-reset / reflash leaves active==true in RTC. begin(false)
+    // is the non-sleep path and must discard that session so the next
+    // real sleep-wake cannot RESUME the old knife's zero.
+    SessionState s;
+    s.target_deg = 17.0f;
+    s.tolerance  = Tolerance::NORMAL;
+    s.g_flat     = {0.0f, 0.0f, -1.0f};
+    s.edge_axis  = {1.0f, 0.0f,  0.0f};
+    s.strokes_A  = 12;
+    session::mark_active(s);
+    App a;
+    a.begin(false);
+    TEST_ASSERT_FALSE(session::has_session());
+    TEST_ASSERT_EQUAL_INT((int)State::BOOT, (int)a.current());
+}
+
 void test_boot_without_session_goes_to_set_target(void) {
     App a;
     a.begin(false);
@@ -415,6 +432,29 @@ void test_history_visit_does_not_duplicate_the_record(void) {
     TEST_ASSERT_EQUAL_INT(1, settings::load_session_history(recs, kSessionHistoryMax));
 }
 
+void test_resume_preserves_elapsed_duration(void) {
+    // Duration is derived from active_ticks (RTC), not a millis() stamp
+    // that resets across deep sleep. 5000 ticks * 20 ms = 100 s.
+    App a;
+    SessionState s;
+    s.target_deg   = 17.0f;
+    s.tolerance    = Tolerance::NORMAL;
+    s.g_flat       = {0.0f, 0.0f, -1.0f};
+    s.edge_axis    = {1.0f, 0.0f,  0.0f};
+    s.active_ticks = 5000;
+    s.green_ticks  = 2500;
+    session::mark_active(s);
+    a.begin(true);
+    uint32_t t = 0;
+    advance(a, t, 100, InputEvent::A_SHORT);         // RESUME_PROMPT -> ACTIVE
+    TEST_ASSERT_TRUE(a.duration_s() >= 100);
+    TEST_ASSERT_TRUE(a.duration_s() <= 110);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> SUMMARY (records)
+    SessionRecord recs[kSessionHistoryMax];
+    TEST_ASSERT_EQUAL_INT(1, settings::load_session_history(recs, kSessionHistoryMax));
+    TEST_ASSERT_TRUE(recs[0].duration_s >= 100);
+}
+
 void test_resume_restores_time_on_angle(void) {
     // A session resumed after deep sleep must keep its pre-sleep green stats,
     // or green_pct and the final record silently drop everything before sleep.
@@ -649,6 +689,7 @@ void test_rezero_abort_leaves_flat_unchanged(void) {
 
 int main(int, char**) {
     UNITY_BEGIN();
+    RUN_TEST(test_non_wake_boot_clears_stale_session);
     RUN_TEST(test_boot_without_session_goes_to_set_target);
     RUN_TEST(test_boot_with_session_goes_to_resume_prompt);
     RUN_TEST(test_incomplete_session_routes_to_zero_cal);
@@ -677,6 +718,7 @@ int main(int, char**) {
     RUN_TEST(test_bias_requires_a_sustained_still_run);
     RUN_TEST(test_bias_rejects_slow_rotation_below_gyro_threshold);
     RUN_TEST(test_history_visit_does_not_duplicate_the_record);
+    RUN_TEST(test_resume_preserves_elapsed_duration);
     RUN_TEST(test_resume_restores_time_on_angle);
     RUN_TEST(test_tolerance_b_long_toggles_steady_without_advancing);
     RUN_TEST(test_tolerance_b_long_does_not_change_tolerance);

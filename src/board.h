@@ -54,4 +54,14 @@ constexpr bool has_axp192() {
 #endif
 }
 
+// Plus AXP192 and S3 M5PM1 latch a power-key click that getKeyState() consumes.
+// Plus2 is a raw GPIO; getKeyState() is a no-op there (release-gate in main.cpp).
+constexpr bool has_pmic_button() {
+#if defined(SG_BOARD_PLUS) || defined(SG_BOARD_S3)
+    return true;
+#else
+    return false;
+#endif
+}
+
 } // namespace board

@@ -6,7 +6,7 @@
 // update that leaves a stale struct in RTC RAM is detected and discarded instead
 // of read as garbage. magic/version MUST stay the first two fields.
 constexpr uint32_t SESSION_MAGIC   = 0x53475A32;  // "SGZ2"
-constexpr uint16_t SESSION_VERSION = 3;            // + time-on-angle counters
+constexpr uint16_t SESSION_VERSION = 4;            // duration from active_ticks; drop millis stamp
 
 struct SessionState {
     uint32_t  magic              = SESSION_MAGIC;
@@ -23,7 +23,6 @@ struct SessionState {
     uint32_t  active_ticks       = 0;
     uint32_t  green_ticks        = 0;
     Side      current_side       = Side::A;
-    uint32_t  session_started_ms = 0;
 };
 
 namespace session {

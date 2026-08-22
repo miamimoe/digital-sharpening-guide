@@ -17,10 +17,15 @@ void test_plus_has_axp192(void) {
     TEST_ASSERT_TRUE(board::has_axp192());
 }
 
+void test_plus_has_pmic_button(void) {
+    TEST_ASSERT_TRUE(board::has_pmic_button());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_native_default_is_plus);
     RUN_TEST(test_plus_led_pin_is_10);
     RUN_TEST(test_plus_has_axp192);
+    RUN_TEST(test_plus_has_pmic_button);
     return UNITY_END();
 }

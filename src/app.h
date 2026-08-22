@@ -30,6 +30,11 @@ public:
     uint8_t   green_pct()        const {
         return active_ticks_ ? (uint8_t)((green_ticks_ * 100u) / active_ticks_) : 0u;
     }
+    // Wall-clock-ish session length from ACTIVE ticks. Survives deep sleep
+    // because the tick counters live in RTC (unlike a raw millis() stamp).
+    uint32_t  duration_s()       const {
+        return (active_ticks_ * kLoopTickMs) / 1000u;
+    }
     Side      current_side()     const { return side_fsm_.current_side(); }
     uint32_t  last_activity_ms() const { return last_activity_ms_; }
     uint32_t  last_stroke_ms()   const { return last_stroke_ms_; }
@@ -107,7 +112,6 @@ private:
     // this measures technique, and it is what should improve over time.
     uint32_t         green_ticks_          = 0;
     uint32_t         active_ticks_         = 0;
-    uint32_t         session_started_ms_   = 0;
 
     bool             in_preset_mode_       = false;
     PresetSelection  preset_selection_     = PresetSelection::P12;

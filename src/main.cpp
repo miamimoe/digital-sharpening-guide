@@ -58,11 +58,13 @@ void setup() {
         }
     }
 
-    // Consume any pending power-key press that woke us, so it doesn't surface as a
-    // BtnPWR click on the first M5.update() and bounce us straight back to sleep.
-    // getKeyState() is AXP192/AXP2101-only; the Plus2/S3 power buttons are handled
-    // through M5.BtnPWR, so only the AXP192 Plus needs this.
-    if (board::has_axp192()) {
+    // Consume any pending power-key press that woke / powered us, so it does
+    // not surface as a BtnPWR click on the first M5.update() and bounce us
+    // straight back to sleep (Plus) or power-off (S3). Plus AXP192 and S3
+    // M5PM1 (M5Unified 0.2.20+) latch a click that getKeyState() drains.
+    // Plus2 is a raw GPIO — getKeyState() is a no-op; the release-gate in
+    // loop() covers that board.
+    if (board::has_pmic_button()) {
         M5.Power.getKeyState();
     }
 
@@ -106,11 +108,15 @@ void loop() {
     g_next_tick_ms += TICK_PERIOD_MS;
 
     M5.update();
-    // Power-key short press = "off" (deep sleep). The matching "on" is the EXT0
-    // wake on GPIO35 armed in power::enter_deep_sleep(). An in-progress session
-    // is in RTC RAM, so waking lands on the RESUME? prompt. The AXP192's 6 s
-    // hard power-off remains available as the hardware escape hatch.
-    if (M5.BtnPWR.wasClicked()) {
+    // Power-key short press = "off" (deep sleep / S3 power-off). The matching
+    // "on" is the EXT0 wake on GPIO35 (Plus/Plus2) or a PMIC power-on (S3).
+    // Button_Class fires clicked on release, so a hold-to-wake that is still
+    // down at the first update() would sleep again the moment the user lets
+    // go. Ignore BtnPWR until we have seen it released once after boot.
+    static bool pwr_released_since_boot = false;
+    if (!pwr_released_since_boot) {
+        if (!M5.BtnPWR.isPressed()) pwr_released_since_boot = true;
+    } else if (M5.BtnPWR.wasClicked()) {
         power::enter_deep_sleep();
     }
     bool a_pressed = M5.BtnA.isPressed();

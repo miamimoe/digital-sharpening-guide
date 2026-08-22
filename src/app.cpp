@@ -139,7 +139,6 @@ void App::begin(bool had_session_in_rtc_ram) {
         strokes_b_          = s.strokes_B;
         active_ticks_       = s.active_ticks;
         green_ticks_        = s.green_ticks;
-        session_started_ms_ = s.session_started_ms;
         side_fsm_.restore_side(s.current_side);
         if (is_zero_vec(g_flat_)) {
             transition(State::ZERO_CAL, 0);
@@ -149,6 +148,10 @@ void App::begin(bool had_session_in_rtc_ram) {
         transition(State::RESUME_PROMPT, 0);
         return;
     }
+    // Crash / EN-reset / reflash is not a sleep-wake. A leftover active
+    // session would resurrect on the next real sleep-wake as RESUME for
+    // the old knife (wrong zero). Discard it now.
+    if (session::has_session()) session::clear();
     transition(State::BOOT, 0);
 }
 
@@ -191,13 +194,11 @@ void App::transition(State to, uint32_t now_ms) {
             // Do NOT reset side_fsm_ here: the resume path (RESUME_PROMPT->ACTIVE)
             // must keep the side restored in begin(). Fresh sessions reset the
             // side explicitly in handle_zero_cal before transitioning here.
-            if (session_started_ms_ == 0) session_started_ms_ = now_ms;
             save_session_();
             break;
         }
         case State::SUMMARY: {
-            uint32_t dur_s = (session_started_ms_ != 0 && now_ms >= session_started_ms_)
-                             ? (now_ms - session_started_ms_) / 1000 : 0;
+            uint32_t dur_s = duration_s();
             // Persist the finished session exactly once, on the ACTIVE -> SUMMARY
             // edge — not per stroke (NVS wear), and NOT on re-entry from HISTORY,
             // which would prepend a duplicate record per history visit. Skip
@@ -255,7 +256,6 @@ void App::save_session_() {
     ss.active_ticks       = active_ticks_;
     ss.green_ticks        = green_ticks_;
     ss.current_side       = side_fsm_.current_side();
-    ss.session_started_ms = session_started_ms_;
     session::mark_active(ss);
 }
 
@@ -326,7 +326,7 @@ void App::handle_zero_cal(const Tick& t) {
                 // to the total-tilt method, so this degrades gracefully.
                 edge_axis_ = compute_edge_axis(g_flat_, raised);
                 zc_substate_ = ZeroCalSubstate::DONE;
-                session_started_ms_ = t.now_ms;
+                green_ticks_ = active_ticks_ = 0;
                 side_fsm_.reset();   // fresh session begins on side A
                 transition(State::ACTIVE, t.now_ms);
             }
@@ -576,7 +576,6 @@ void App::handle_summary(const Tick& t) {
     if (t.input == InputEvent::A_SHORT) {
         strokes_a_ = strokes_b_ = 0;
         green_ticks_ = active_ticks_ = 0;
-        session_started_ms_ = 0;
         session::clear();
         transition(State::SET_TARGET, t.now_ms);
     } else if (t.input == InputEvent::B_SHORT) {
@@ -585,7 +584,6 @@ void App::handle_summary(const Tick& t) {
         session::clear();
         strokes_a_ = strokes_b_ = 0;
         green_ticks_ = active_ticks_ = 0;
-        session_started_ms_ = 0;
         transition(State::SLEEP, t.now_ms);
     }
 }
@@ -651,12 +649,12 @@ void App::handle_resume_prompt(const Tick& t) {
     } else if (t.input == InputEvent::B_SHORT) {
         session::clear();
         strokes_a_ = strokes_b_ = 0;
-        session_started_ms_ = 0;
+        green_ticks_ = active_ticks_ = 0;
         transition(State::SET_TARGET, t.now_ms);
     } else if (t.now_ms - state_entered_ms_ >= 5000) {
         session::clear();
         strokes_a_ = strokes_b_ = 0;
-        session_started_ms_ = 0;
+        green_ticks_ = active_ticks_ = 0;
         transition(State::SET_TARGET, t.now_ms);
     }
     if (state_ == State::RESUME_PROMPT) {

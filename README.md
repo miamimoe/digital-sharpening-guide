@@ -48,6 +48,12 @@ The beta also adds three things worth trying:
 - **Time on-angle** — the session summary now shows what share of the session you held inside tolerance. Stroke count says how much you did; this says how well, and it's the number that should climb as your technique does.
 - **Past sessions** — hold **B** on the summary screen for your last five.
 
+Also in this beta, three reliability fixes that were eating sessions:
+
+- A crash, reset, or reflash no longer leaves a zombie session that comes back as **RESUME?** for the previous knife (and its zero) the next time you sleep and wake.
+- Session **time** now survives Plus / Plus2 deep-sleep resume, same as stroke counts and time-on-angle. It used to reset to `00:00` because it was a raw `millis()` stamp.
+- Power-key on Plus2 / S3 no longer treats the wake / power-on press as “off.” Plus2 was going back to sleep when you let go; S3 could power itself off immediately after boot.
+
 [**🧪 Flash the beta →**](https://miamimoe.github.io/digital-sharpening-guide/beta.html) · it hasn't run on real hardware yet, which is the whole reason it's a beta. The [normal flasher](https://miamimoe.github.io/digital-sharpening-guide/) puts the stable release back whenever you want.
 
 **What would help most:** does the number actually sit still, and does green still arrive *fast enough*? Smoothing always trades response for calm — if green now feels late, that's the thing worth telling me. [Open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues) either way.
@@ -171,7 +177,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 - **Edge-axis bevel measurement.** The two-step zero calibration captures both a flat reference *and* the cutting-edge hinge axis. The bevel angle is measured as rotation *about that axis*, so tip-to-heel skew doesn't inflate the reading and a single calibration serves both faces of the blade.
 - **Mahony AHRS filter** fuses gyro + accelerometer at 50 Hz, with per-session gyro-bias capture and a snap-to-raw recovery when the device is verifiably still.
 - **Motion-based stroke counting.** Passes are detected as horizontal linear-acceleration peaks (with hysteresis + a refractory interval) while you're on-angle — not from angle-dwell timing.
-- **Battery-aware.** Idle sleep, screen dimming, an 80 MHz CPU clock, and a one-click power key. On the **Plus/Plus2** this is a true deep sleep with the session preserved in RTC RAM, so waking resumes where you left off. On the **M5StickS3** the power button is owned by the M5PM1 PMIC (not a wake-capable GPIO), so the device fully powers off instead — a power-key press turns it back on with a fresh boot (the in-progress session isn't resumed on the S3). Figure on roughly an hour or two of continuous use on the small cell (untuned — your mileage will vary).
+- **Battery-aware.** Idle sleep, screen dimming, an 80 MHz CPU clock, and a one-click power key. On the **Plus/Plus2** this is a true deep sleep with the session preserved in RTC RAM, so waking resumes where you left off — strokes, time-on-angle, and session duration. On the **M5StickS3** the power button is owned by the M5PM1 PMIC (not a wake-capable GPIO), so the device fully powers off instead — a power-key press turns it back on with a fresh boot (the in-progress session isn't resumed on the S3). Figure on roughly an hour or two of continuous use on the small cell (untuned — your mileage will vary).
 
 More detail lives in [`docs/`](docs/) — the design spec, implementation plan, and hardware bring-up checklist.
 
@@ -193,6 +199,9 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
 | Stroke count is off by a few | Expected at v0.2.1 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Plus2 wakes, then sleeps when you let go of the power key | Fixed in the current beta — it now ignores that wake press. Re-flash from the [beta page](https://miamimoe.github.io/digital-sharpening-guide/beta.html). |
+| S3 turns on and immediately powers off | Same family as above; the beta drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
+| Resume shows the previous knife after a crash / reflash | Fixed in the current beta — a non-sleep boot now discards the leftover session. |
 
 ## Known limitations (v0.2.1)
 
