@@ -34,6 +34,20 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
+## 🧪 Beta: steady mode — testers wanted
+
+If the live angle number jumps around while you sharpen, there's a beta that goes after exactly that.
+
+A sharpening stroke pushes the blade **sideways**, and the filter's guard against that was nearly blind to it: 0.18 g of sweep — the level the firmware already counts as a stroke — tilted its gravity reference **10.2°** while barely changing its magnitude, so it sailed through unrejected. The beta averages the gravity reference before it steers the angle (stroke acceleration cancels out over a cycle, gravity doesn't) and stops the displayed number and the colour from flip-flopping on sub-degree noise. Simulated, that's **2.3–4× steadier** depending on how fast you stroke.
+
+**You can switch it on and off on the device** — hold **B** on the TOLERANCE screen — so you can compare it against the old behaviour on the same knife, same stone, in the same session.
+
+[**🧪 Flash the beta →**](https://miamimoe.github.io/digital-sharpening-guide/beta.html) · it hasn't run on real hardware yet, which is the whole reason it's a beta. The [normal flasher](https://miamimoe.github.io/digital-sharpening-guide/) puts the stable release back whenever you want.
+
+**What would help most:** does the number actually sit still, and does green still arrive *fast enough*? Smoothing always trades response for calm — if green now feels late, that's the thing worth telling me. [Open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues) either way.
+
+---
+
 ## ⚠️ Read this first
 
 This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
