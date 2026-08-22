@@ -16,9 +16,14 @@
 //     Also reports what a per-tick oversample would buy (see SAMPLE HEADROOM
 //     below), which is the open question for the anti-alias work.
 //
-// Usage: flash [env:diag], open the serial monitor at 115200, lay the device on
-// the stone and hold still for the reference capture, then sharpen normally and
-// read the columns.
+// Usage: flash the environment that MATCHES YOUR BOARD —
+//   [env:diag]     M5StickC Plus / Plus2  (MPU6886)
+//   [env:diag-s3]  M5StickS3              (BMI270)
+// then open the serial monitor at 115200, hold the device still at your angle
+// for the reference capture, and sharpen normally while reading the columns.
+// Flashing the Plus build onto an S3 (or the reverse) trips the WRONG FIRMWARE
+// guard in the real firmware, but this diagnostic has no such guard — so pick
+// the right one.
 #ifdef DIAG_BUILD
 #include <Arduino.h>
 #include <M5Unified.h>
@@ -139,7 +144,7 @@ void loop() {
     static uint32_t next   = millis();
     static uint32_t window = millis();
     static uint32_t ticks = 0, fails = 0;
-    static uint32_t drained_total = 0;
+    static uint32_t drained_total = 0, drain_samples = 0, drain_ticks = 0;
 
     while ((int32_t)(millis() - next) < 0) delay(1);
     next += 20;                                    // 50 Hz, as production
@@ -147,31 +152,48 @@ void loop() {
 
     Vec3 acc{}, gyr{};
     bool ok = read_one(acc, gyr);
-    if (!ok) ++fails;
     ++ticks;
 
-    // SAMPLE HEADROOM: drain any further fresh samples this tick and compare
-    // their mean against the single sample production would have used. The gap
-    // is the per-tick sampling noise an oversampling/box-filter would remove —
-    // i.e. a direct measurement of whether the anti-alias work is worth it.
-    Vec3 more{}, mg{}, asum = acc;
-    int  extra = 0;
-    while (extra < 31 && read_one(more, mg)) {
-        asum.x += more.x; asum.y += more.y; asum.z += more.z;
-        ++extra;
-    }
-    drained_total += extra;
-    if (extra > 0) {
-        Vec3 mean = { asum.x/(extra+1), asum.y/(extra+1), asum.z/(extra+1) };
-        float dx = acc.x-mean.x, dy = acc.y-mean.y, dz = acc.z-mean.z;
-        s_drift.add(std::sqrt(dx*dx + dy*dy + dz*dz) * 1000.0f);   // milli-g
-    }
+    if (!ok) {
+        // getAccel/getGyro return false when no NEW sample is ready — they still
+        // write the last cached one. Feeding that duplicate to the filters would
+        // integrate the same sample twice and skew the very numbers this build
+        // exists to report, so the tick is dropped rather than measured. Both
+        // filters see identical input either way, so the comparison stays fair.
+        ++fails;
+    } else {
+        // SAMPLE HEADROOM, throttled. Drain any further fresh samples and compare
+        // their mean against the single sample production would have used: the
+        // gap is the per-tick sampling noise an oversample would remove, which is
+        // what decides whether the anti-alias work is worth doing.
+        //
+        // Throttled because draining CONSUMES those samples — doing it every tick
+        // starves the next one and manufactures the read failure handled above,
+        // corrupting the A/B measurement with an artefact of measuring it. One
+        // tick in 25 (~2 Hz) leaves the other 24 with a production-like stream.
+        if (++drain_ticks >= 25) {
+            drain_ticks = 0;
+            Vec3 more{}, mg{}, asum = acc;
+            int  extra = 0;
+            while (extra < 31 && read_one(more, mg)) {
+                asum.x += more.x; asum.y += more.y; asum.z += more.z;
+                ++extra;
+            }
+            drained_total += extra;
+            ++drain_samples;
+            if (extra > 0) {
+                Vec3 mean = { asum.x/(extra+1), asum.y/(extra+1), asum.z/(extra+1) };
+                float dx = acc.x-mean.x, dy = acc.y-mean.y, dz = acc.z-mean.z;
+                s_drift.add(std::sqrt(dx*dx + dy*dy + dz*dz) * 1000.0f);  // milli-g
+            }
+        }
 
-    f_raw.update(gyr, acc);
-    f_steady.update(gyr, acc);
+        f_raw.update(gyr, acc);
+        f_steady.update(gyr, acc);
 
-    s_raw.add(angle_between_deg(f_raw.gravity(), g_ref));
-    s_steady.add(angle_between_deg(f_steady.gravity(), g_ref));
+        s_raw.add(angle_between_deg(f_raw.gravity(), g_ref));
+        s_steady.add(angle_between_deg(f_steady.gravity(), g_ref));
+    }
 
     // Report every 2 s.
     if ((int32_t)(millis() - window) >= 2000) {
@@ -184,10 +206,11 @@ void loop() {
             (double)s_raw.sd(),    (double)s_raw.pp(),
             (double)s_steady.sd(), (double)s_steady.pp(),
             (double)gain_sd,       (double)gain_pp,
-            (double)drained_total / (ticks ? ticks : 1), (double)s_drift.mean(),
+            (double)drained_total / (drain_samples ? drain_samples : 1),
+            (double)s_drift.mean(),
             (unsigned)fails, (unsigned)ticks);
         s_raw.reset(); s_steady.reset(); s_drift.reset();
-        ticks = fails = 0; drained_total = 0;
+        ticks = fails = 0; drained_total = 0; drain_samples = 0;
     }
 }
 #endif // DIAG_BUILD

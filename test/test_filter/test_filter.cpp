@@ -184,6 +184,32 @@ void test_accel_tau_zero_is_legacy_behaviour(void) {
     TEST_ASSERT_EQUAL_FLOAT(ga.z, gb.z);
 }
 
+void test_accel_reference_tracks_raw_when_smoothing_is_off(void) {
+    // accel_reference() promises "the last raw accel when smoothing is off".
+    // Guard the contract so it cannot rot back to reporting {0,0,0}.
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(0.0f);
+    const Vec3 a = {0.10f, -0.20f, -0.97f};
+    f.update({0,0,0}, a);
+    Vec3 r = f.accel_reference();
+    TEST_ASSERT_EQUAL_FLOAT(a.x, r.x);
+    TEST_ASSERT_EQUAL_FLOAT(a.y, r.y);
+    TEST_ASSERT_EQUAL_FLOAT(a.z, r.z);
+}
+
+void test_accel_reference_is_smoothed_when_smoothing_is_on(void) {
+    // With smoothing on it must lag the raw sample, not echo it.
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(mahony::ACCEL_LP_TAU_S);
+    f.update({0,0,0}, {0.0f, 0.0f, -1.0f});      // seeds the low-pass
+    f.update({0,0,0}, {0.5f, 0.0f, -1.0f});      // step on X
+    Vec3 r = f.accel_reference();
+    TEST_ASSERT_TRUE(r.x > 0.0f);                // it moved...
+    TEST_ASSERT_TRUE(r.x < 0.5f);                // ...but nowhere near all the way
+}
+
 void test_nudge_reseeds_the_smoothed_accel(void) {
     // After a snap the low-pass must not drag the estimate back to its old value.
     MahonyFilter f;
@@ -217,5 +243,7 @@ int main(int, char**) {
     RUN_TEST(test_accel_lp_still_converges_to_gravity);
     RUN_TEST(test_accel_tau_zero_is_legacy_behaviour);
     RUN_TEST(test_nudge_reseeds_the_smoothed_accel);
+    RUN_TEST(test_accel_reference_tracks_raw_when_smoothing_is_off);
+    RUN_TEST(test_accel_reference_is_smoothed_when_smoothing_is_on);
     return UNITY_END();
 }

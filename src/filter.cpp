@@ -40,6 +40,11 @@ void MahonyFilter::update(Vec3 gyro_dps, Vec3 accel_g) {
             a_lp_.z += al * (accel_g.z - a_lp_.z);
         }
         a_ref = a_lp_;
+    } else {
+        // Smoothing off: keep the raw sample so accel_reference() honours its
+        // contract (last raw accel) instead of reporting {0,0,0} to diagnostics.
+        a_lp_       = accel_g;
+        a_lp_valid_ = true;
     }
 
     float ax = a_ref.x, ay = a_ref.y, az = a_ref.z;
