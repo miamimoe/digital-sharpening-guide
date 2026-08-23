@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Beta — Digital Sharpening Guide</title>
-  <meta name="description" content="Unlisted beta build of the Digital Sharpening Guide firmware: steady mode, for testing before release." />
+  <meta name="description" content="Diagnostic and beta builds of the Digital Sharpening Guide firmware. Steady mode shipped in v0.3.0." />
   <meta name="robots" content="noindex, nofollow" />
   <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
   <style>
@@ -77,16 +77,16 @@
 </head>
 <body>
   <div class="wrap">
-    <span class="beta-tag">Beta · v0.3.0-beta.3</span>
+    <span class="beta-tag">Released as v0.3.0</span>
     <h1>Steady mode</h1>
-    <p class="sub">A test build that goes after the jittery angle reading. Not linked from the main flasher and not a release — flash it, sharpen with it, and tell me whether the number actually sits still.</p>
+    <p class="sub">This beta shipped as <strong>v0.3.0</strong> — the <a href="./">main flasher</a> now installs it. The page stays up for the <strong>diagnostic</strong> builds, which measure the old and new filters side by side on your hardware. The beta firmware builds below are identical to the v0.3.0 release apart from the splash version.</p>
 
     <div class="panel warn">
       <h2>Before you flash</h2>
       <ul>
         <li>This <strong>replaces</strong> whatever is on the stick. To go back, re-flash from the <a href="./">normal flasher</a> — nothing here is one-way.</li>
         <li>Your saved settings (tolerance, buzzer) survive <em>unless you let the installer erase the flash</em> — the erase checkbox wipes them. A new <code>STEADY</code> setting is added, defaulting to <strong>on</strong>.</li>
-        <li>Not hardware-tested by me — that is the entire point of handing it to you.</li>
+        <li>Now hardware-tested on a Plus; Plus2 / S3 still rely on community testers.</li>
       </ul>
     </div>
 
@@ -108,7 +108,7 @@
         <span slot="unsupported" class="unsupported">Your browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
         <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) connection.</span>
       </esp-web-install-button>
-      <p class="note center" style="margin-top:16px;">Desktop Chrome / Edge / Opera, USB-C <em>data</em> cable. Splash should read <code>v0.3.0-beta.3</code>.</p>
+      <p class="note center" style="margin-top:16px;">Desktop Chrome / Edge / Opera, USB-C <em>data</em> cable. Splash reads <code>v0.3.0-beta.3</code> (beta builds) or shows diagnostic output over serial.</p>
     </div>
 
     <div class="panel">
@@ -159,7 +159,7 @@
 
     <div class="panel">
       <h2>Going back</h2>
-      <p style="margin:0">The <a href="./">normal flasher</a> puts the released v0.2.1 back on. Your tolerance and buzzer preferences survive the round trip as long as you don't tick the installer's erase option.</p>
+      <p style="margin:0">The <a href="./">normal flasher</a> puts the released v0.3.0 back on. Your tolerance and buzzer preferences survive the round trip as long as you don't tick the installer's erase option.</p>
     </div>
 
     <footer>

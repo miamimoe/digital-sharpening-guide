@@ -1,13 +1,13 @@
 {
   "name": "Digital Sharpening Guide (M5StickC Plus)",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "funding_url": "https://github.com/miamimoe/digital-sharpening-guide",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
-        { "path": "firmware/sharpening-guide-plus-v0.2.1.bin", "offset": 0 }
+        { "path": "firmware/sharpening-guide-plus-v0.3.0.bin", "offset": 0 }
       ]
     }
   ]

@@ -62,7 +62,7 @@
     <div class="lights"><span class="b"></span><span class="g"></span><span class="r"></span></div>
     <h1>Digital Sharpening Guide</h1>
     <p class="sub">Flash the firmware to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page. No PlatformIO, no command line — just a USB-C cable and a Chrome-based browser on a computer.</p>
-    <p class="note" style="text-align:center;margin:-8px 0 22px;">Latest firmware: <strong>v0.2.1</strong> — adds <strong>25°</strong> and <strong>28°</strong> angle presets. The version shows on the splash screen after flashing.</p>
+    <p class="note" style="text-align:center;margin:-8px 0 22px;">Latest firmware: <strong>v0.3.0</strong> — steady mode (a much calmer angle reading), a built-in accuracy check, time on-angle, and session history. The version shows on the splash screen after flashing.</p>
 
     <div class="panel">
       <h2>1 · Pick your device</h2>
@@ -97,10 +97,15 @@
       <p class="note" style="margin-top:16px;">When the dialog opens, pick the serial port (often labelled <em>CP2104</em> / <em>USB Serial</em> on a Plus/Plus2, or <em>USB JTAG/serial</em> on an S3) and choose <strong>Install</strong>.</p>
     </div>
 
-    <div class="panel" style="border-color:#f0a13a;">
-      <h2 style="color:#f0a13a;">🧪 Testers wanted: steady mode</h2>
-      <p style="margin-top:0">Does the angle number jump around while you sharpen? There's a beta that goes after exactly that — it stops stroke acceleration from dragging the reading, and stops the number and colour flip-flopping on sub-degree noise. You can toggle it on and off <strong>on the device</strong> to compare against the current behaviour in the same session.</p>
-      <p style="margin-bottom:0"><a href="beta.html"><strong>Flash the beta →</strong></a> <span class="note">Now <strong>v0.3.0-beta.3</strong> — session time survives sleep, a crash no longer resurrects the previous knife, and Plus2/S3 do not treat the wake press as off. This flasher puts the stable release back whenever you want.</span></p>
+    <div class="panel">
+      <h2>✨ New in v0.3.0</h2>
+      <ul style="margin-top:0">
+        <li><strong>Steady mode</strong> — the angle reading no longer jumps with each stroke. Stroke acceleration used to tilt the filter's gravity reference by up to 10°; it is now averaged out before it steers the angle, and the number and colour hold against sub-degree chatter. On by default; <strong>hold B</strong> on the TOLERANCE screen to switch it off and compare.</li>
+        <li><strong>Accuracy check</strong> — hold <strong>A</strong> on SET TARGET, lay it flat, press A, then stand it on a known angle and read to 0.1°. <a href="angle-check.html">Printable wedges</a> if you don't own an angle block.</li>
+        <li><strong>Time on-angle</strong> on the session summary, and your <strong>last five sessions</strong> (hold <strong>B</strong> on the summary).</li>
+        <li>Fixes: session time survives sleep; a crash or reflash no longer brings back the previous knife as RESUME; Plus2 / S3 no longer treat the wake press as “off.”</li>
+      </ul>
+      <p style="margin-bottom:0" class="note">Want to measure the filter on your own hardware? The <a href="beta.html">diagnostic builds</a> are still available.</p>
     </div>
 
     <script>

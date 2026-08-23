@@ -24,39 +24,28 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v0.2.1
+## What's new in v0.3.0
 
-- **Two more angle presets: 25° and 28°** — the common sharpen/deburr pair for Chinese chef knives. `B` now cycles **12° / 15° / 17° / 20° / 22° / 25° / 28° / CANCEL**. Requested by a user sharpening on an S3, where the presets are the quickest way in.
-- Boot splash now shows the real firmware version (it had been stuck reading `v0.1.0`).
-- Build dependencies pinned to exact versions so a given release rebuilds byte-for-byte instead of drifting with upstream.
+**The angle reading sits still now.** A sharpening stroke pushes the blade *sideways*, and the filter's guard against that was nearly blind to it: 0.18 g of sweep — the level the firmware already counts as a stroke — tilted its gravity reference **10.2°** while barely changing its magnitude, so it sailed through unrejected. v0.3.0 averages the gravity reference before it steers the angle (stroke acceleration cancels out over a cycle, gravity doesn't) and stops the displayed number and the colour from flip-flopping on sub-degree noise. Simulated, that's **2.3–4× steadier** depending on how fast you stroke.
 
-[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
+**Steady mode is on by default**, and you can still switch it off on the device — hold **B** on the TOLERANCE screen — to compare against the old behaviour on the same knife, same stone, in the same session.
 
----
-
-## 🧪 Beta: steady mode — testers wanted
-
-If the live angle number jumps around while you sharpen, there's a beta that goes after exactly that.
-
-A sharpening stroke pushes the blade **sideways**, and the filter's guard against that was nearly blind to it: 0.18 g of sweep — the level the firmware already counts as a stroke — tilted its gravity reference **10.2°** while barely changing its magnitude, so it sailed through unrejected. The beta averages the gravity reference before it steers the angle (stroke acceleration cancels out over a cycle, gravity doesn't) and stops the displayed number and the colour from flip-flopping on sub-degree noise. Simulated, that's **2.3–4× steadier** depending on how fast you stroke.
-
-**You can switch it on and off on the device** — hold **B** on the TOLERANCE screen — so you can compare it against the old behaviour on the same knife, same stone, in the same session.
-
-The beta also adds three things worth trying:
+Also new:
 
 - **Accuracy check** — hold **A** on SET TARGET. Lay the device flat, press **A**, then stand it on a known angle and read the number at 0.1°. Answers "is this thing actually right?" in about twenty seconds. There are [printable wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) if you don't own an angle block.
 - **Time on-angle** — the session summary now shows what share of the session you held inside tolerance. Stroke count says how much you did; this says how well, and it's the number that should climb as your technique does.
 - **Past sessions** — hold **B** on the summary screen for your last five.
+- **Gyro bias refreshes** whenever the device is verifiably still, so thermal drift doesn't accumulate across a long session.
 
-Also in this beta, three reliability fixes that were eating sessions:
+Fixes:
 
 - A crash, reset, or reflash no longer leaves a zombie session that comes back as **RESUME?** for the previous knife (and its zero) the next time you sleep and wake.
 - Session **time** now survives Plus / Plus2 deep-sleep resume, same as stroke counts and time-on-angle. It used to reset to `00:00` because it was a raw `millis()` stamp.
 - Power-key on Plus2 / S3 no longer treats the wake / power-on press as “off.” Plus2 was going back to sleep when you let go; S3 could power itself off immediately after boot.
 
-[**🧪 Flash the beta →**](https://miamimoe.github.io/digital-sharpening-guide/beta.html) · it hasn't run on real hardware yet, which is the whole reason it's a beta. The [normal flasher](https://miamimoe.github.io/digital-sharpening-guide/) puts the stable release back whenever you want.
+From v0.2.1: the **25° and 28°** presets (`B` cycles **12° / 15° / 17° / 20° / 22° / 25° / 28° / CANCEL**), a splash that shows the real firmware version, and pinned build dependencies so a release rebuilds byte-for-byte.
 
-**What would help most:** does the number actually sit still, and does green still arrive *fast enough*? Smoothing always trades response for calm — if green now feels late, that's the thing worth telling me. [Open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues) either way.
+[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed. **What would help most:** does green still arrive *fast enough*? Smoothing trades response for calm — if green now feels late, that's the thing worth telling me. [Open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues) either way. The [diagnostic builds](https://miamimoe.github.io/digital-sharpening-guide/beta.html) can measure the old vs. new filter on your own hardware.
 
 ---
 
@@ -74,9 +63,9 @@ That's why there are two steps instead of one. It's not setup; it's the reason t
 
 ## ⚠️ Read this first
 
-This is a **hobby project at v0.2.1**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
+This is a **hobby project at v0.3.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
-- It tells you where your angle is; **you** still do the sharpening. Don't trust it blindly on an expensive knife until you've checked it — the beta has a built-in **accuracy check** (hold **A** on SET TARGET) and there are [printable angle wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) to check it against.
+- It tells you where your angle is; **you** still do the sharpening. Don't trust it blindly on an expensive knife until you've checked it — there's a built-in **accuracy check** (hold **A** on SET TARGET) and there are [printable angle wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) to check it against.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
 - Mind the edge: you're handling a sharp knife near a small electronic device. Go slow the first few passes.
 
@@ -157,14 +146,14 @@ Once flashed, the device walks you through everything on-screen. A full session:
    - *(If it says "KEEP STILL", just set it down for a second — or tap **B** to force the capture.)*
 5. **Sharpen.** The whole screen turns **green / blue / red**. Chase green. The center number is your stroke count for the current side.
 6. **Switch sides.** When you flip the knife to sharpen the other face, **press B** to switch the device to the other side — that side's stroke count picks up where it left off. *(If the angle reads off after re-mounting, short-press **A** to re-zero in place.)*
-7. **End the session.** **Long-press A** → `SESSION` summary (target, tolerance, strokes per side, time). Press **A** for a new session, or **B** to sleep.
+7. **End the session.** **Long-press A** → `SESSION` summary (target, tolerance, strokes per side, time, time on-angle). Press **A** for a new session, **hold B** for your last five sessions, or **B** to sleep.
 
 ### Controls
 
 | Button | Short press | Long press |
 |---|---|---|
-| **A** (front) | confirm / capture / re-zero | **end session** (→ summary) |
-| **B** (side) | cycle option / switch blade side | **toggle buzzer** |
+| **A** (front) | confirm / capture / re-zero | **end session** (→ summary) / **accuracy check** (SET TARGET) |
+| **B** (side) | cycle option / switch blade side | **toggle buzzer** (ACTIVE) / **toggle steady mode** (TOLERANCE) / **session history** (SUMMARY) |
 | **Power** (left side) | sleep / wake | hold 6 s = full power-off (AXP192 / Plus only — see note below) |
 
 
@@ -198,12 +187,12 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Screen stuck on **"KEEP STILL"** during calibration | Set the device down on the bench for a second so it can capture — or tap **B** to force the capture. |
 | Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
-| Stroke count is off by a few | Expected at v0.2.1 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
-| Plus2 wakes, then sleeps when you let go of the power key | Fixed in the current beta — it now ignores that wake press. Re-flash from the [beta page](https://miamimoe.github.io/digital-sharpening-guide/beta.html). |
-| S3 turns on and immediately powers off | Same family as above; the beta drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
-| Resume shows the previous knife after a crash / reflash | Fixed in the current beta — a non-sleep boot now discards the leftover session. |
+| Stroke count is off by a few | Expected at v0.3.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Plus2 wakes, then sleeps when you let go of the power key | Fixed in v0.3.0 — it now ignores that wake press. Re-flash from the [flasher](https://miamimoe.github.io/digital-sharpening-guide/). |
+| S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
+| Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v0.2.1)
+## Known limitations (v0.3.0)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.

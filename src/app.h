@@ -66,7 +66,7 @@ private:
     float            target_deg_           = 17.0f;
     Tolerance        tol_                  = Tolerance::NORMAL;
     bool             buzzer_on_            = false;
-    // Steady mode (beta A/B switch): accel-reference smoothing in the filter plus
+    // Steady mode (A/B switch, on by default): accel-reference smoothing in the filter plus
     // display and colour hysteresis. Toggled by B-hold on the TOLERANCE screen.
     bool             steady_               = true;
 
