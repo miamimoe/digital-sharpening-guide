@@ -153,6 +153,7 @@ pio run -e m5stick-s3 -t upload        # for M5StickS3
 - [ ] **Plus2** — power-key short press puts the device to deep sleep (screen off); a second short press wakes it and **resumes the in-progress session** with counts, time-on-angle, and duration intact. Releasing the wake press must **not** immediately re-sleep (firmware ignores BtnPWR until one released sample after boot)
 - [ ] **S3** — power-key (or the SLEEP action / idle timeout) fully powers the device **off** (M5PM1 has no GPIO wake source, so it does not deep-sleep); a power-key press then turns it back **on with a fresh boot** — the in-progress session is *not* resumed on the S3 (expected). The device must reliably power back on and **stay on** (firmware drains the M5PM1 click in `setup()` so the power-on press is not treated as off). If it still dies immediately, the PMIC may be hard-resetting on a single click — note that in the issue
 - [ ] Magnet grips the flat of a steel knife blade without slipping during a few slow sharpening passes
+- [ ] **Battery icon** (top-right corner, v1.0.0+) shows a plausible number of bars on battery, and a **+** appears beside it within ~10 s of plugging in USB-C. A single dash means `M5.Power.getBatteryLevel()` returned an error for this board — please report that. (Plus2 reads the cell via an ADC divider, S3 via the M5PM1; neither path has been checked against a real charge curve yet.)
 
 ### Reporting results
 

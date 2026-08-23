@@ -138,6 +138,11 @@ void loop() {
     App::Tick tick{now, ev, accel, gyro, fault};
     g_app.on_tick(tick);
 
+    // Battery icon goes on after the state's own draw so it sits on top of any
+    // full-screen repaint that tick. Sampling is throttled inside power.
+    power::BatteryView batt = power::battery_sample(now);
+    ui::draw_battery(batt.bars, batt.charging);
+
     // Sleep check uses App's real last-activity / last-stroke timestamps.
     if (power::check_idle(now, g_app.current(),
                           g_app.last_activity_ms(),

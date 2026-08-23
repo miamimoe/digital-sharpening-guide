@@ -62,7 +62,7 @@
     <div class="lights"><span class="b"></span><span class="g"></span><span class="r"></span></div>
     <h1>Digital Sharpening Guide</h1>
     <p class="sub">Flash the firmware to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page. No PlatformIO, no command line — just a USB-C cable and a Chrome-based browser on a computer.</p>
-    <p class="note" style="text-align:center;margin:-8px 0 22px;">Latest firmware: <strong>v0.3.0</strong> — steady mode (a much calmer angle reading), a built-in accuracy check, time on-angle, and session history. The version shows on the splash screen after flashing.</p>
+    <p class="note" style="text-align:center;margin:-8px 0 22px;">Latest firmware: <strong>v1.0.0</strong> — the first non-preview release. Adds a battery icon; carries forward steady mode, the accuracy check, time on-angle, and session history from v0.3.0. The version shows on the splash screen after flashing.</p>
 
     <div class="panel">
       <h2>1 · Pick your device</h2>
@@ -98,7 +98,12 @@
     </div>
 
     <div class="panel">
-      <h2>✨ New in v0.3.0</h2>
+      <h2>✨ New in v1.0.0</h2>
+      <ul style="margin-top:0">
+        <li><strong>Battery icon</strong> in the top-right corner of every screen — four bars, a <strong>+</strong> while charging over USB, a dash if the reading isn't available. Polled every ten seconds so it doesn't touch battery life.</li>
+        <li><strong>1.0</strong> — the calibrate / hold-the-colour / count / summary loop has been stable for months, so this is the release that stops calling itself a preview. Everything below is unchanged from v0.3.0.</li>
+      </ul>
+      <h2 style="font-size:1rem">From v0.3.0</h2>
       <ul style="margin-top:0">
         <li><strong>Steady mode</strong> — the angle reading no longer jumps with each stroke. Stroke acceleration used to tilt the filter's gravity reference by up to 10°; it is now averaged out before it steers the angle, and the number and colour hold against sub-degree chatter. On by default; <strong>hold B</strong> on the TOLERANCE screen to switch it off and compare.</li>
         <li><strong>Accuracy check</strong> — hold <strong>A</strong> on SET TARGET, lay it flat, press A, then stand it on a known angle and read to 0.1°. <a href="angle-check.html">Printable wedges</a> if you don't own an angle block.</li>

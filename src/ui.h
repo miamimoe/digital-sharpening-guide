@@ -38,5 +38,10 @@ namespace ui {
     // so a frozen-looking countdown is understood as "you're moving it".
     void draw_zero_cal_progress(int remaining_ms, bool moving);
 
+    // Battery icon in the top-right corner of every screen. bars: 0..4 filled,
+    // -1 = unknown. Cheap to call every tick — repaints only on change or after
+    // a full-screen wipe.
+    void draw_battery(int bars, bool charging);
+
     void set_backlight(uint8_t percent); // 0..100
 }

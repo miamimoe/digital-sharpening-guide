@@ -24,7 +24,15 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v0.3.0
+## What's new in v1.0.0
+
+**1.0.** The core loop — calibrate, hold the colour, count the strokes, read the summary — has been stable on the bench for months, so this is the release that stops calling itself a preview. One new thing on screen:
+
+- **Battery icon** in the top-right corner of every screen: four bars, a **+** beside it while it's charging over USB, a single dash if the reading isn't available. It's polled once every ten seconds, so it costs nothing you'd notice.
+
+The rest of what's below shipped in v0.3.0 and is unchanged here.
+
+### From v0.3.0
 
 **The angle reading sits still now.** A sharpening stroke pushes the blade *sideways*, and the filter's guard against that was nearly blind to it: 0.18 g of sweep — the level the firmware already counts as a stroke — tilted its gravity reference **10.2°** while barely changing its magnitude, so it sailed through unrejected. v0.3.0 averages the gravity reference before it steers the angle (stroke acceleration cancels out over a cycle, gravity doesn't) and stops the displayed number and the colour from flip-flopping on sub-degree noise. Simulated, that's **2.3–4× steadier** depending on how fast you stroke.
 
@@ -63,7 +71,7 @@ That's why there are two steps instead of one. It's not setup; it's the reason t
 
 ## ⚠️ Read this first
 
-This is a **hobby project at v0.3.0**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
+This is a **hobby project**, shared because people asked for it — not a precision instrument. It's a *coach to build muscle memory*, not a jig that holds the angle for you.
 
 - It tells you where your angle is; **you** still do the sharpening. Don't trust it blindly on an expensive knife until you've checked it — there's a built-in **accuracy check** (hold **A** on SET TARGET) and there are [printable angle wedges](https://miamimoe.github.io/digital-sharpening-guide/angle-check.html) to check it against.
 - Stroke-count and filter thresholds are **still being tuned** against real sessions — counts may be off by a stroke or two. Feedback welcome (see [Contributing](#contributing)).
@@ -187,16 +195,16 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Screen stuck on **"KEEP STILL"** during calibration | Set the device down on the bench for a second so it can capture — or tap **B** to force the capture. |
 | Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
-| Stroke count is off by a few | Expected at v0.3.0 — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Stroke count is off by a few | Known — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 | Plus2 wakes, then sleeps when you let go of the power key | Fixed in v0.3.0 — it now ignores that wake press. Re-flash from the [flasher](https://miamimoe.github.io/digital-sharpening-guide/). |
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v0.3.0)
+## Known limitations (v1.0.0)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
-- **Board support:** the **M5StickC Plus** is validated on real hardware. The **M5StickC Plus2** and **M5StickS3** are compile-verified and code-reviewed against M5Stack datasheets, but not yet confirmed on a physical device — if you own one, please flash it and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) with results.
+- **Board support:** the **M5StickC Plus** is validated on real hardware. The **M5StickC Plus2** and **M5StickS3** are compile-verified and code-reviewed against M5Stack datasheets, but not yet confirmed on a physical device — if you own one, please flash it and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) with results. That includes the battery icon: the Plus2 reads its cell through an ADC divider and the S3 through the M5PM1, neither of which has been checked against a real charge curve yet.
 
 ## Contributing
 

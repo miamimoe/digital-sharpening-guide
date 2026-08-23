@@ -34,6 +34,21 @@ namespace {
     float          s_shown_deg   = 0.0f;
     bool           s_shown_valid = false;
 
+    // Battery icon (top-right corner). Repaints only when the corner was wiped
+    // by a full-screen fill or when the shown level / charging state changes.
+    uint16_t s_bg          = COL_BLACK;   // background under the icon (set by wipe)
+    bool     s_batt_wiped  = true;
+    int      s_batt_bars   = -2;          // impossible sentinel; -1 = unknown
+    bool     s_batt_chg    = false;
+
+    // Every full-screen fill goes through here so the battery icon knows it
+    // has to repaint. Do not call M5.Display.fillScreen() directly.
+    void wipe(uint16_t bg) {
+        M5.Display.fillScreen(bg);
+        s_bg         = bg;
+        s_batt_wiped = true;
+    }
+
     // Throttle ZERO_CAL countdown to ~10 Hz (only repaint when tenths digit or
     // the moving-state changes).
     int  s_last_zc_tenths       = -1;
@@ -82,7 +97,7 @@ void begin() {
 }
 
 void clear() {
-    M5.Display.fillScreen(COL_BLACK);
+    wipe(COL_BLACK);
     s_last_valid = false;
     s_last_angle_valid = false;
     s_last_zc_tenths_valid = false;
@@ -94,7 +109,7 @@ void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v0.3.0", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.0.0", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -140,7 +155,7 @@ void draw_active(const ActiveView& v) {
 
     bool color_changed = !s_last_valid || s_last.color != v.color;
     if (color_changed) {
-        M5.Display.fillScreen(bg);
+        wipe(bg);
         // Legend strip across the top.
         M5.Display.fillRect(8,   4, 12, 12, COL_BLUE);
         M5.Display.fillRect(78,  4, 12, 12, COL_GREEN);
@@ -261,7 +276,7 @@ void draw_verify_capture(int remaining_ms, bool moving) {
     s_last_zc_tenths_valid = true;
     s_last_zc_moving       = moving;
 
-    M5.Display.fillScreen(COL_BLACK);
+    wipe(COL_BLACK);
     draw_centered("ACCURACY CHECK", 8, 2, COL_WHITE, COL_BLACK);
     char buf[16];
     std::snprintf(buf, sizeof buf, "%d.%d", tenths / 10, tenths % 10);
@@ -279,7 +294,7 @@ void draw_verify_reading(float deg) {
     if (s_last_verify_valid && std::strcmp(buf, s_last_verify) == 0) return;
 
     if (!s_last_verify_valid) {
-        M5.Display.fillScreen(COL_BLACK);
+        wipe(COL_BLACK);
         draw_centered("ACCURACY CHECK", 8, 2, COL_WHITE, COL_BLACK);
         draw_centered("Compare with your reference", 104, 1, COL_WHITE, COL_BLACK);
         draw_centered("A-hold or B: done", 120, 1, COL_WHITE, COL_BLACK);
@@ -349,7 +364,7 @@ void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b,
 
 void draw_zero_cal_prompt(int step, bool retry) {
     s_last_zc_tenths_valid = false;
-    M5.Display.fillScreen(COL_BLACK);
+    wipe(COL_BLACK);
     char hdr[16];
     std::snprintf(hdr, sizeof hdr, "ZERO CAL  %d/2", step);
     draw_centered(hdr, 8, 2, COL_WHITE, COL_BLACK);
@@ -367,7 +382,7 @@ void draw_zero_cal_progress(int remaining_ms, bool moving) {
     s_last_zc_tenths_valid = true;
     s_last_zc_moving       = moving;
 
-    M5.Display.fillScreen(COL_BLACK);
+    wipe(COL_BLACK);
     if (moving) {
         // The capture can't progress while the device is moving — say so loudly
         // instead of showing a frozen countdown, and offer the force-capture.
@@ -379,6 +394,40 @@ void draw_zero_cal_progress(int remaining_ms, bool moving) {
         char buf[16];
         std::snprintf(buf, sizeof buf, "%d.%ds", tenths / 10, tenths % 10);
         draw_centered(buf, 70, 4, COL_WHITE, COL_BLACK);
+    }
+}
+
+void draw_battery(int bars, bool charging) {
+    if (!s_batt_wiped && bars == s_batt_bars && charging == s_batt_chg) return;
+    s_batt_wiped = false;
+    s_batt_bars  = bars;
+    s_batt_chg   = charging;
+
+    // Geometry: 20x10 body at the top-right, 2x4 nub, four 3-px bars inside,
+    // charging "+" to its left. The erase rect starts at x = PLUS_X - 1 = 205:
+    // the widest header ("ACCURACY CHECK", size 2) ends at x = 204, so keep
+    // PLUS_X >= 206 or that header's last glyph gets clipped.
+    constexpr int BX = 214, BY = 3, BW = 20, BH = 10;
+    constexpr int NUB_W = 2, NUB_H = 4;
+    constexpr int PLUS_X = 206, PLUS_Y = 5;   // charging "+" glyph, 5x5
+
+    // Erase the whole corner (glyph + body + nub) with the current background.
+    M5.Display.fillRect(PLUS_X - 1, BY - 1, (BX + BW + NUB_W) - (PLUS_X - 1) + 1, BH + 2, s_bg);
+    M5.Display.drawRect(BX, BY, BW, BH, COL_WHITE);
+    M5.Display.fillRect(BX + BW, BY + (BH - NUB_H) / 2, NUB_W, NUB_H, COL_WHITE);
+
+    if (bars < 0) {
+        // Unknown level: a single dash in the middle rather than an empty body,
+        // so "no reading" is not mistaken for "flat".
+        M5.Display.fillRect(BX + 7, BY + BH / 2 - 1, 6, 2, COL_WHITE);
+    } else {
+        for (int i = 0; i < bars && i < 4; i++) {
+            M5.Display.fillRect(BX + 2 + i * 4, BY + 2, 3, BH - 4, COL_WHITE);
+        }
+    }
+    if (charging) {
+        M5.Display.fillRect(PLUS_X + 2, PLUS_Y,     1, 5, COL_WHITE);
+        M5.Display.fillRect(PLUS_X,     PLUS_Y + 2, 5, 1, COL_WHITE);
     }
 }
 
@@ -412,6 +461,7 @@ namespace ui {
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
     void draw_zero_cal_prompt(int, bool) {}
     void draw_zero_cal_progress(int, bool) {}
+    void draw_battery(int, bool) {}
     void set_backlight(uint8_t) {}
 }
 #endif

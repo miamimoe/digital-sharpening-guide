@@ -37,6 +37,25 @@ IdleConfig config_for(State s) {
 
 void begin() {}
 
+int battery_bars(int pct, int prev_bars) {
+    if (pct < 0) return -1;
+    if (pct > 100) pct = 100;
+    int bars = pct / 20;           // 0..5
+    if (bars > 4) bars = 4;
+    if (prev_bars < 0 || prev_bars > 4 || bars == prev_bars) return bars;
+    // Hysteresis: stay on prev_bars while pct is within HYST of the boundary
+    // between prev_bars and the new value. Boundaries are at 20 * n.
+    constexpr int HYST = 3;
+    if (bars < prev_bars) {
+        int boundary = 20 * prev_bars;           // falling below this edge
+        if (pct >= boundary - HYST) return prev_bars;
+    } else {
+        int boundary = 20 * (prev_bars + 1);     // rising above this edge
+        if (pct <= boundary + HYST) return prev_bars;
+    }
+    return bars;
+}
+
 bool check_idle(uint32_t now_ms, State current,
                 uint32_t last_activity_ms, uint32_t last_stroke_ms)
 {
@@ -76,6 +95,18 @@ void update_backlight(uint32_t now_ms, State current,
 }
 
 #ifndef UNIT_TEST
+BatteryView battery_sample(uint32_t now_ms) {
+    static BatteryView s_view{-1, false};
+    static uint32_t    s_last_poll_ms = 0;
+    static bool        s_polled = false;
+    if (s_polled && (now_ms - s_last_poll_ms) < BATTERY_POLL_MS) return s_view;
+    s_polled       = true;
+    s_last_poll_ms = now_ms;
+    s_view.bars     = battery_bars(M5.Power.getBatteryLevel(), s_view.bars);
+    s_view.charging = (M5.Power.isCharging() == m5::Power_Class::is_charging);
+    return s_view;
+}
+
 [[noreturn]] void enter_deep_sleep() {
     M5.Display.setBrightness(0);
     switch (board::variant()) {
@@ -118,6 +149,7 @@ void update_backlight(uint32_t now_ms, State current,
     while (true) {}  // neither deepSleep() nor powerOff() returns
 }
 #else
+BatteryView battery_sample(uint32_t) { return {-1, false}; }
 [[noreturn]] void enter_deep_sleep() {
     while (true) {}
 }
