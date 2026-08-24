@@ -64,7 +64,43 @@ def check_bin(path: Path, chip_family: str) -> list[str]:
         errs.append(f"{path.name}: 0xE000 does not look like boot_app0")
     if peek(data, APP_OFF, 1) != b"\xe9":
         errs.append(f"{path.name}: no app image magic at 0x10000")
+
+    # The bootloader header's flash-size field must cover the whole partition
+    # table: the second-stage bootloader validates each entry against it and
+    # reset-loops (silently, on UART0) if any partition lies past the declared
+    # size. Shipped once: v0.3.0..v1.0.0 S3 bins declared 4MB over an 8MB table
+    # (issue #1).
+    bl_off = 0 if chip_family == "ESP32-S3" else ESP32_BL_OFF
+    if peek(data, bl_off, 1) == b"\xe9" and peek(data, PART_OFF, 2) == b"\xaa\x50":
+        nibble = data[bl_off + 3] >> 4
+        declared = SIZE_NIBBLE_BYTES.get(nibble)
+        if declared is None:
+            errs.append(f"{path.name}: unknown flash-size nibble {nibble:#x} in "
+                        f"bootloader header")
+        else:
+            span = partition_table_span(data)
+            if span > declared:
+                errs.append(f"{path.name}: bootloader header declares "
+                            f"{declared // 0x100000}MB flash but the partition table "
+                            f"spans {span / 0x100000:.2f}MB — the bootloader will "
+                            f"reject the table and reset-loop")
     return errs
+
+
+# Bootloader image header byte 3, high nibble -> flash size in bytes.
+SIZE_NIBBLE_BYTES = {0: 0x100000, 1: 0x200000, 2: 0x400000,
+                     3: 0x800000, 4: 0x1000000, 5: 0x2000000}
+
+
+def partition_table_span(data: bytes) -> int:
+    """Highest end offset of any entry in the partition table at 0x8000."""
+    span, off = 0, PART_OFF
+    while data[off:off + 2] == b"\xaa\x50":
+        p_off = int.from_bytes(data[off + 4:off + 8], "little")
+        p_size = int.from_bytes(data[off + 8:off + 12], "little")
+        span = max(span, p_off + p_size)
+        off += 32
+    return span
 
 
 def main() -> int:
