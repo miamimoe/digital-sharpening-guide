@@ -24,7 +24,13 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v1.0.0
+## What's new in v1.0.1
+
+**A bug fix for the battery icon.** On a fully charged device the icon showed up empty for the first ten seconds after boot. The power chip's battery sensor only starts sampling when the firmware boots, so the very first reading — taken milliseconds later — usually had no measurement behind it, and that empty answer was being drawn as a flat battery and then cached. The firmware now recognises an impossible reading, shows the dash instead, and retries until a real measurement arrives, which takes about a second.
+
+Nothing else changed; everything below is as it shipped in v1.0.0.
+
+### From v1.0.0
 
 **1.0.** The core loop — calibrate, hold the colour, count the strokes, read the summary — has been stable on the bench for months, so this is the release that stops calling itself a preview. One new thing on screen:
 
@@ -200,7 +206,7 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v1.0.0)
+## Known limitations (v1.0.1)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
