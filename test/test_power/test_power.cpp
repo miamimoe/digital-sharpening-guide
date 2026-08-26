@@ -43,6 +43,27 @@ void test_bars_big_jump_not_held(void) {
     TEST_ASSERT_EQUAL_INT(0, power::battery_bars(5, 4));
 }
 
+// Boot-time ADC race: the AXP192's VBAT ADC samples at 25 Hz and is enabled
+// only in M5.begin(), so the first poll often reads 0 mV — which M5Unified
+// clamps to a "valid" 0 % instead of an error. The gate must turn any
+// physically impossible VBAT into -1 (unknown) so the UI draws the dash, not
+// an empty battery.
+void test_gate_rejects_implausible_vbat(void) {
+    TEST_ASSERT_EQUAL_INT(-1, power::battery_level_gate(0,   0));     // ADC not ready
+    TEST_ASSERT_EQUAL_INT(-1, power::battery_level_gate(100, 2499));  // below any LiPo
+    TEST_ASSERT_EQUAL_INT(-1, power::battery_level_gate(50,  -1));    // M5PM1 "undetermined"
+    TEST_ASSERT_EQUAL_INT(-1, power::battery_level_gate(50,   0));    // M5PM1 "no battery"
+}
+
+// With a plausible VBAT behind it, the percentage passes through untouched —
+// including a genuine 0 % (flat cell at ~3.3 V) and M5Unified error codes.
+void test_gate_passes_plausible_readings(void) {
+    TEST_ASSERT_EQUAL_INT(85, power::battery_level_gate(85, 4100));
+    TEST_ASSERT_EQUAL_INT(0,  power::battery_level_gate(0,  3300));   // honestly flat
+    TEST_ASSERT_EQUAL_INT(7,  power::battery_level_gate(7,  2500));   // boundary is inclusive
+    TEST_ASSERT_EQUAL_INT(-2, power::battery_level_gate(-2, 4100));   // error code passthrough
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_bars_fresh_bands);
@@ -50,5 +71,7 @@ int main(void) {
     RUN_TEST(test_bars_clamps_over_100);
     RUN_TEST(test_bars_hysteresis_holds_near_boundary);
     RUN_TEST(test_bars_big_jump_not_held);
+    RUN_TEST(test_gate_rejects_implausible_vbat);
+    RUN_TEST(test_gate_passes_plausible_readings);
     return UNITY_END();
 }

@@ -37,6 +37,11 @@ IdleConfig config_for(State s) {
 
 void begin() {}
 
+int battery_level_gate(int pct, int batt_mv) {
+    if (batt_mv < BATTERY_MV_VALID_MIN) return -1;
+    return pct;
+}
+
 int battery_bars(int pct, int prev_bars) {
     if (pct < 0) return -1;
     if (pct > 100) pct = 100;
@@ -98,11 +103,20 @@ void update_backlight(uint32_t now_ms, State current,
 BatteryView battery_sample(uint32_t now_ms) {
     static BatteryView s_view{-1, false};
     static uint32_t    s_last_poll_ms = 0;
-    static bool        s_polled = false;
-    if (s_polled && (now_ms - s_last_poll_ms) < BATTERY_POLL_MS) return s_view;
+    static bool        s_polled     = false;
+    static bool        s_level_seen = false;
+    // Fast retry only while chasing the first valid reading during boot warm-up;
+    // an S3 genuinely running with no battery must fall back to the slow cadence,
+    // not hammer the I2C bus with 2 Hz retries forever.
+    uint32_t interval = (!s_level_seen && now_ms < BATTERY_WARMUP_MS)
+                            ? BATTERY_RETRY_MS : BATTERY_POLL_MS;
+    if (s_polled && (now_ms - s_last_poll_ms) < interval) return s_view;
     s_polled       = true;
     s_last_poll_ms = now_ms;
-    s_view.bars     = battery_bars(M5.Power.getBatteryLevel(), s_view.bars);
+    int pct = battery_level_gate(M5.Power.getBatteryLevel(),
+                                 M5.Power.getBatteryVoltage());
+    if (pct >= 0) s_level_seen = true;
+    s_view.bars     = battery_bars(pct, s_view.bars);
     s_view.charging = (M5.Power.isCharging() == m5::Power_Class::is_charging);
     return s_view;
 }
