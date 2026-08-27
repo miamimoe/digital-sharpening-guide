@@ -5,73 +5,254 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Flash the Digital Sharpening Guide</title>
   <meta name="description" content="Flash the Digital Sharpening Guide firmware to your M5StickC Plus, Plus2, or M5StickS3 right from your browser — no toolchain, no install." />
-  <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- Self-hosted (docs/vendor/) rather than pulled from a CDN, so a modified
+       CDN response can never alter the firmware-install flow. -->
+  <script type="module" src="vendor/esp-web-tools-10.2.1/install-button.js"></script>
   <style>
     :root {
-      --bg: #0d0f12;
-      --panel: #16191f;
-      --text: #e8eaed;
-      --muted: #9aa0a6;
-      --green: #20c25a;
-      --blue: #2f7bff;
-      --red: #ff4d4d;
-      --line: #262a31;
+      --bg:      #101418;   /* gunmetal */
+      --bg-deep: #0B0E11;
+      --panel:   #171C22;
+      --line:    #232A32;
+      --steel:   #D7DDE3;   /* primary text */
+      --muted:   #8D97A1;
+      --faint:   #5C6670;
+      --green:   #2FBF5F;   /* on angle   */
+      --blue:    #4C8DFF;   /* too low    */
+      --red:     #E5484D;   /* too high   */
+      --amber:   #D9A441;   /* caution — unvalidated hardware */
+      --green-ink: #08240F;
+      --display: "Chakra Petch", "Arial Narrow", sans-serif;
+      --body:    "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+      --mono:    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--body);
       background: var(--bg);
-      color: var(--text);
-      line-height: 1.55;
+      color: var(--steel);
+      line-height: 1.6;
       -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 48px 22px 80px; }
-    .lights { display: flex; gap: 10px; justify-content: center; margin-bottom: 22px; }
-    .lights span { width: 16px; height: 16px; border-radius: 50%; display: inline-block; }
-    .lights .b { background: var(--blue); }
-    .lights .g { background: var(--green); box-shadow: 0 0 18px var(--green); }
-    .lights .r { background: var(--red); }
-    h1 { font-size: 1.9rem; text-align: center; margin: 0 0 8px; letter-spacing: -0.02em; }
-    .sub { text-align: center; color: var(--muted); margin: 0 auto 34px; max-width: 520px; }
-    .panel {
+    a { color: var(--green); text-underline-offset: 2px; }
+    a:hover { color: #4fd67d; }
+    :focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 2px; }
+    code {
+      font-family: var(--mono);
+      background: var(--bg-deep);
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-size: 0.85em;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 22px 72px; }
+
+    /* ---------- hero ---------- */
+    header { padding-top: 44px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin: 0 0 10px;
+    }
+    .eyebrow .ver { color: var(--green); }
+    h1 {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: clamp(1.9rem, 5.4vw, 2.8rem);
+      line-height: 1.06;
+      letter-spacing: -0.01em;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+    }
+    .sub { color: var(--muted); max-width: 560px; margin: 0 0 6px; }
+
+    /* ---------- bevel gauge (signature) ---------- */
+    .gauge {
+      margin: 26px 0 34px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background:
+        radial-gradient(120% 90% at 50% 0%, #1A2027 0%, var(--bg-deep) 70%);
+      padding: 10px 14px 0;
+      overflow: hidden;
+    }
+    .gauge svg { display: block; width: 100%; height: auto; }
+    .gauge .readout { font-family: var(--display); font-weight: 700; }
+    .gauge .label   { font-family: var(--mono); }
+    .gauge-caption {
+      display: flex; flex-wrap: wrap; gap: 6px 18px;
+      justify-content: center;
+      font-family: var(--mono); font-size: 0.72rem;
+      color: var(--muted);
+      padding: 8px 0 12px;
+      border-top: 1px solid var(--line);
+    }
+    .gauge-caption .k { display: inline-flex; align-items: center; gap: 7px; }
+    .gauge-caption .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+    .dot.blue  { background: var(--blue); }
+    .dot.green { background: var(--green); }
+    .dot.red   { background: var(--red); }
+
+    /* ---------- steps ---------- */
+    .step {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 14px;
-      padding: 26px;
-      margin-bottom: 22px;
+      padding: 22px 24px;
+      margin-bottom: 18px;
     }
-    .panel h2 { margin: 0 0 14px; font-size: 1.05rem; }
-    ol { margin: 0; padding-left: 20px; }
-    ol li { margin-bottom: 8px; }
-    .cta { text-align: center; margin: 30px 0 8px; }
-    esp-web-install-button { --esp-tools-button-color: #0d0f12; --esp-tools-button-text-color: #fff; }
-    .btn-fallback {
-      display: inline-block; padding: 13px 26px; border-radius: 999px;
-      background: var(--green); color: #06210f; font-weight: 700; text-decoration: none;
+    .step h2 {
+      display: flex; align-items: baseline; gap: 12px;
+      font-family: var(--display);
+      font-size: 1.02rem; font-weight: 600;
+      letter-spacing: 0.03em; text-transform: uppercase;
+      margin: 0 0 14px;
     }
-    .note { color: var(--muted); font-size: 0.88rem; text-align: center; }
-    .unsupported { display: none; color: var(--red); text-align: center; font-size: 0.95rem; margin-top: 14px; }
-    code { background: #0a0c0f; padding: 2px 6px; border-radius: 5px; font-size: 0.85em; }
-    a { color: var(--green); }
-    footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 40px; }
+    .step h2 .n {
+      font-family: var(--mono); font-weight: 500;
+      color: var(--faint); font-size: 0.85rem;
+    }
+    ol, ul { margin: 0; padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    li:last-child { margin-bottom: 0; }
+    .note { color: var(--muted); font-size: 0.88rem; }
+
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 9px;
+      background: var(--bg-deep);
+      color: var(--steel);
+      border: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238D97A1' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+    }
+    .hw-status {
+      margin: 12px 0 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--amber);
+      background: rgba(217, 164, 65, 0.07);
+      border-radius: 0 8px 8px 0;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .hw-status strong { color: var(--steel); }
+
+    /* ---------- flash CTA ---------- */
+    .cta { text-align: center; margin: 30px 0 26px; }
+    esp-web-install-button { --esp-tools-button-color: var(--bg-deep); --esp-tools-button-text-color: #fff; }
+    .btn-flash {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 15px 34px;
+      border: none; border-radius: 10px;
+      background: var(--green); color: var(--green-ink);
+      font-family: var(--display); font-weight: 700;
+      font-size: 1.05rem; letter-spacing: 0.05em; text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(47,191,95,.4), 0 6px 24px rgba(47,191,95,.22);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .btn-flash:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(47,191,95,.55), 0 10px 30px rgba(47,191,95,.3); }
+    .btn-flash:active { transform: translateY(0); }
+    .unsupported { display: none; color: var(--red); font-size: 0.95rem; margin-top: 14px; }
+
+    /* ---------- changelog ---------- */
+    .log h3 {
+      font-family: var(--mono); font-weight: 500;
+      font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--green); margin: 0 0 10px;
+    }
+    .log ul { margin-bottom: 4px; }
+    details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+    details summary {
+      cursor: pointer; color: var(--muted);
+      font-family: var(--mono); font-size: 0.8rem;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    details summary:hover { color: var(--steel); }
+    details h3 { color: var(--muted); margin-top: 14px; }
+    details[open] summary { margin-bottom: 4px; }
+
+    footer {
+      text-align: center; color: var(--faint);
+      font-family: var(--mono); font-size: 0.78rem;
+      margin-top: 44px;
+    }
+    footer a { color: var(--muted); }
+    footer .sep { margin: 0 8px; color: var(--line); }
+
+    @media (max-width: 480px) {
+      header { padding-top: 30px; }
+      .step { padding: 18px; }
+      .gauge-caption { gap: 4px 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .btn-flash { transition: none; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="lights"><span class="b"></span><span class="g"></span><span class="r"></span></div>
-    <h1>Digital Sharpening Guide</h1>
-    <p class="sub">Flash the firmware to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page. No PlatformIO, no command line — just a USB-C cable and a Chrome-based browser on a computer.</p>
-    <p class="note" style="text-align:center;margin:-8px 0 22px;">Latest firmware: <strong>v1.0.1</strong> — fixes the battery icon reading empty for the first few seconds after boot. Carries forward everything from v1.0.0 and v0.3.0. The version shows on the splash screen after flashing.</p>
+    <header>
+      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.0.2</span></p>
+      <h1>Digital Sharpening Guide</h1>
+      <p class="sub">A magnet-backed angle guide for your knives. Stick it to the blade, set a target angle, and the screen holds green while you hold the bevel. Flash it to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page — no toolchain, just a USB-C cable.</p>
+    </header>
 
-    <div class="panel">
-      <h2>1 · Pick your device</h2>
-      <select id="device" aria-label="Choose your device" style="width:100%;padding:11px 12px;border-radius:8px;background:#0a0c0f;color:var(--text);border:1px solid var(--line);font-size:1rem;">
+    <!-- Signature: the device's own feedback language, as a live bevel gauge -->
+    <div class="gauge" aria-label="Animated demonstration: the screen shows blue when the angle is below target, green on target, red above target.">
+      <svg viewBox="0 0 720 250" role="img" aria-hidden="true">
+        <!-- whetstone -->
+        <rect x="60" y="208" width="600" height="14" rx="3" fill="#2A323B"/>
+        <rect x="60" y="208" width="600" height="4"  rx="2" fill="#39434E"/>
+        <!-- target window: the green wedge about the pivot (140,208), target 17 deg +/- 3 -->
+        <path id="tolwedge" d="" fill="rgba(47,191,95,0.14)"/>
+        <path id="tolwedge-lo" d="" fill="none" stroke="rgba(47,191,95,0.55)" stroke-dasharray="4 5" stroke-width="1.5"/>
+        <path id="tolwedge-hi" d="" fill="none" stroke="rgba(47,191,95,0.55)" stroke-dasharray="4 5" stroke-width="1.5"/>
+        <!-- blade: thin wedge authored with its lower edge exactly on the pivot line,
+             so the drawn angle IS the readout angle after rotation -->
+        <g id="blade">
+          <path d="M140 208 L620 208 L620 195 L156 204.5 Z" fill="#B9C2CB"/>
+          <path d="M620 195 L620 198 L158 205.5 L156 204.5 Z" fill="#E7ECF1"/>
+          <!-- the stick, magnet-side down on the blade flat -->
+          <rect x="392" y="179" width="56" height="23" rx="4" fill="#171C22" stroke="#39434E" stroke-width="1"/>
+          <rect id="stick-screen" x="399" y="183" width="34" height="15" rx="2" fill="#2FBF5F"/>
+          <circle cx="441" cy="190.5" r="2.4" fill="#39434E"/>
+        </g>
+        <!-- angle arc + readout -->
+        <path id="arc" d="" fill="none" stroke="#5C6670" stroke-width="1.5"/>
+        <text id="readout" class="readout" x="575" y="92" font-size="42" fill="#2FBF5F" text-anchor="middle">17.0&#176;</text>
+        <text id="statelabel" class="label" x="575" y="116" font-size="12" fill="#2FBF5F" text-anchor="middle">ON ANGLE — HOLD IT</text>
+        <text class="label" x="252" y="238" font-size="12" fill="#8D97A1" text-anchor="middle">TARGET 17&#176; &#177;3</text>
+      </svg>
+      <div class="gauge-caption">
+        <span class="k"><span class="dot blue"></span>TOO LOW — RAISE THE SPINE</span>
+        <span class="k"><span class="dot green"></span>ON ANGLE</span>
+        <span class="k"><span class="dot red"></span>TOO HIGH — LOWER IT</span>
+      </div>
+    </div>
+
+    <div class="step">
+      <h2><span class="n">01</span> Pick your device</h2>
+      <select id="device" aria-label="Choose your device">
         <option value="manifest-plus.json">M5StickC Plus</option>
         <option value="manifest-plus2.json">M5StickC Plus2</option>
         <option value="manifest-s3.json">M5StickS3</option>
       </select>
-      <p class="note" id="device-note" style="margin:12px 0 0;text-align:left;">
+      <p class="hw-status">
         The <strong>M5StickC&nbsp;Plus</strong> build is validated on real hardware. The
         <strong>Plus2</strong> and <strong>S3</strong> builds are compile-verified and code-reviewed but
         <strong>not yet confirmed on a physical device</strong> — if you flash one, please
@@ -79,66 +260,166 @@
       </p>
     </div>
 
-    <div class="panel">
-      <h2>2 · Before you click</h2>
+    <div class="step">
+      <h2><span class="n">02</span> Before you flash</h2>
       <ol>
-        <li>Use <strong>Chrome, Edge, or Opera on a desktop/laptop</strong> (Web Serial isn't supported on Safari, Firefox, or phones).</li>
-        <li>Plug the device into your computer with a <strong>USB-C data cable</strong> (some cables are charge-only — if nothing connects, try another cable).</li>
-        <li>If your computer doesn't see the device, install the <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB driver</a> and reconnect. (The M5StickS3 connects over native USB and usually needs no driver.)</li>
+        <li>Use <strong>Chrome, Edge, or Opera on a desktop or laptop</strong> — Web Serial isn't supported on Safari, Firefox, or phones.</li>
+        <li>Connect the device with a <strong>USB-C data cable</strong>. Some cables are charge-only; if nothing shows up, try another cable.</li>
+        <li>Still nothing? Install the <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">CP210x USB driver</a> and reconnect. (The M5StickS3 uses native USB and usually needs no driver.)</li>
       </ol>
     </div>
 
     <div class="cta">
       <esp-web-install-button id="installer" manifest="manifest-plus.json">
-        <button slot="activate" class="btn-fallback">⚡ Flash it now</button>
-        <span slot="unsupported" class="unsupported">Your browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
+        <button slot="activate" class="btn-flash">&#9889; Flash it now</button>
+        <span slot="unsupported" class="unsupported">This browser can't flash over USB. Open this page in desktop Chrome, Edge, or Opera.</span>
         <span slot="not-allowed" class="unsupported">Flashing needs a secure (https) connection.</span>
       </esp-web-install-button>
-      <p class="note" style="margin-top:16px;">When the dialog opens, pick the serial port (often labelled <em>CP2104</em> / <em>USB Serial</em> on a Plus/Plus2, or <em>USB JTAG/serial</em> on an S3) and choose <strong>Install</strong>.</p>
+      <p class="note" style="margin-top:16px;">When the dialog opens, pick the serial port — usually <em>CP2104</em> / <em>USB Serial</em> on a Plus or Plus2, <em>USB JTAG/serial</em> on an S3 — and choose <strong>Install</strong>.</p>
     </div>
 
-    <div class="panel">
-      <h2>✨ New in v1.0.1</h2>
-      <ul style="margin-top:0">
-        <li><strong>Battery icon no longer reads empty at boot.</strong> The power chip's battery sensor is switched on barely a moment before the first reading is taken, so it often had no measurement ready — and that "no measurement" was being drawn as a flat battery for the first ten seconds on a fully charged device. It now shows the dash until a real reading arrives, which takes about a second.</li>
-      </ul>
-      <h2 style="font-size:1rem">From v1.0.0</h2>
-      <ul style="margin-top:0">
-        <li><strong>Battery icon</strong> in the top-right corner of every screen — four bars, a <strong>+</strong> while charging over USB, a dash if the reading isn't available. Polled every ten seconds so it doesn't touch battery life.</li>
-        <li><strong>1.0</strong> — the calibrate / hold-the-colour / count / summary loop has been stable for months, so this is the release that stops calling itself a preview. Everything below is unchanged from v0.3.0.</li>
-      </ul>
-      <h2 style="font-size:1rem">From v0.3.0</h2>
-      <ul style="margin-top:0">
-        <li><strong>Steady mode</strong> — the angle reading no longer jumps with each stroke. Stroke acceleration used to tilt the filter's gravity reference by up to 10°; it is now averaged out before it steers the angle, and the number and colour hold against sub-degree chatter. On by default; <strong>hold B</strong> on the TOLERANCE screen to switch it off and compare.</li>
-        <li><strong>Accuracy check</strong> — hold <strong>A</strong> on SET TARGET, lay it flat, press A, then stand it on a known angle and read to 0.1°. <a href="angle-check.html">Printable wedges</a> if you don't own an angle block.</li>
-        <li><strong>Time on-angle</strong> on the session summary, and your <strong>last five sessions</strong> (hold <strong>B</strong> on the summary).</li>
-        <li>Fixes: session time survives sleep; a crash or reflash no longer brings back the previous knife as RESUME; Plus2 / S3 no longer treat the wake press as “off.”</li>
-      </ul>
-      <p style="margin-bottom:0" class="note">Want to measure the filter on your own hardware? The <a href="beta.html">diagnostic builds</a> are still available.</p>
-    </div>
-
-    <script>
-      // Point the installer at the manifest for the selected device.
-      var deviceSelect = document.getElementById('device');
-      var installer = document.getElementById('installer');
-      deviceSelect.addEventListener('change', function () {
-        installer.setAttribute('manifest', deviceSelect.value);
-      });
-    </script>
-
-    <div class="panel">
-      <h2>3 · After flashing</h2>
+    <div class="step">
+      <h2><span class="n">03</span> After flashing</h2>
       <ol>
-        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash, then a <strong>SET TARGET</strong> screen. (If you see a red <strong>WRONG FIRMWARE</strong> screen, you flashed the build for a different stick — go back and pick the matching device.)</li>
-        <li>Stick it onto your knife's flat (these sticks have a magnet in the back) and follow the on-screen calibration.</li>
-        <li>Full usage walkthrough &amp; controls are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
+        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.0.2</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
+        <li>Stick it onto the knife's flat — the magnet is in the back — and follow the on-screen calibration.</li>
+        <li>The full walkthrough and control reference are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
       </ol>
     </div>
 
+    <div class="step log">
+      <h2><span class="n">&#9670;</span> What's new</h2>
+      <h3>v1.0.2</h3>
+      <ul>
+        <li><strong>Re-zero now does what the screen says.</strong> During an in-place re-zero, tapping <strong>B</strong> force-captures the reference — exactly as the "tap B to capture" hint promises. (It used to silently cancel instead.) To cancel a re-zero, hold <strong>A</strong>.</li>
+        <li><strong>No duplicate history entries.</strong> If the device went to sleep while showing the session summary, the finished session could be offered for "resume" and end up recorded twice. A finished session now stays finished.</li>
+        <li><strong>An abandoned calibration can't drain the battery.</strong> A capture that never completes (say the device ends up jostling around in a bag) used to hold the device awake indefinitely. It now gives up after a minute and lets the normal auto-sleep take over.</li>
+        <li><strong>No stray beep at session start.</strong> With the buzzer on, the first moment of a session no longer beeps as if you'd just fallen off the angle.</li>
+        <li><strong>Sleep keeps your stats.</strong> Session time and time-on-angle accumulated since your last stroke are no longer lost when the device sleeps mid-session (idle or power button).</li>
+        <li>Also: the accuracy-check screen no longer flickers, the buzzer on/off overlay no longer leaves a black box behind, the WRONG FIRMWARE screen dims to protect the battery, and Plus2 owners get their own <a href="beta.html">diagnostic build</a>.</li>
+      </ul>
+      <details>
+        <summary>Earlier releases</summary>
+        <h3>v1.0.1</h3>
+        <ul>
+          <li><strong>Battery icon no longer reads empty at boot.</strong> The power chip's sensor is switched on moments before the first reading, so a fully charged device could show a flat battery for its first ten seconds. It now shows a dash until a real reading arrives (about a second).</li>
+        </ul>
+        <h3>v1.0.0</h3>
+        <ul>
+          <li><strong>Battery icon</strong> in the top-right corner of every screen — four bars, a <strong>+</strong> while charging, a dash if the reading isn't available. Polled every ten seconds so it doesn't touch battery life.</li>
+          <li><strong>1.0</strong> — the calibrate / hold-the-colour / count / summary loop had been stable for months, so this release stopped calling itself a preview.</li>
+        </ul>
+        <h3>v0.3.0</h3>
+        <ul>
+          <li><strong>Steady mode</strong> — the angle reading no longer jumps with each stroke. On by default; hold <strong>B</strong> on the TOLERANCE screen to switch it off and compare.</li>
+          <li><strong>Accuracy check</strong> — hold <strong>A</strong> on SET TARGET, lay it flat, press A, then stand it on a known angle and read to 0.1&#176;. <a href="angle-check.html">Printable wedges</a> if you don't own an angle block.</li>
+          <li><strong>Time on-angle</strong> on the session summary, and your <strong>last five sessions</strong> (hold <strong>B</strong> on the summary).</li>
+          <li>Fixes: session time survives sleep; a crash or reflash no longer brings back the previous knife as RESUME; Plus2 / S3 no longer treat the wake press as "off."</li>
+        </ul>
+      </details>
+      <p class="note" style="margin:14px 0 0;">Want to measure the filter on your own hardware? The <a href="beta.html">diagnostic builds</a> are still available.</p>
+    </div>
+
     <footer>
-      Open-source firmware ·
       <a href="https://github.com/miamimoe/digital-sharpening-guide" target="_blank" rel="noopener">github.com/miamimoe/digital-sharpening-guide</a>
+      <span class="sep">/</span> MIT
+      <span class="sep">/</span> <a href="angle-check.html">printable angle wedges</a>
     </footer>
   </div>
+
+  <script>
+    // Point the installer at the manifest for the selected device.
+    var deviceSelect = document.getElementById('device');
+    var installer = document.getElementById('installer');
+    deviceSelect.addEventListener('change', function () {
+      installer.setAttribute('manifest', deviceSelect.value);
+    });
+
+    // ---- bevel gauge animation ----
+    // Pivot = the blade edge resting on the stone. The blade group is authored
+    // lying at 0 deg; rotating it by -angle lifts the spine. Colors follow the
+    // firmware's rules: green within +/-3 of the 17 deg target, blue below, red above.
+    (function () {
+      var PIVOT_X = 140, PIVOT_Y = 208, TARGET = 17, TOL = 3;
+      var blade  = document.getElementById('blade');
+      var screen = document.getElementById('stick-screen');
+      var read   = document.getElementById('readout');
+      var state  = document.getElementById('statelabel');
+      var arc    = document.getElementById('arc');
+      var css = getComputedStyle(document.documentElement);
+      var COL = {
+        green: css.getPropertyValue('--green').trim() || '#2FBF5F',
+        blue:  css.getPropertyValue('--blue').trim()  || '#4C8DFF',
+        red:   css.getPropertyValue('--red').trim()   || '#E5484D'
+      };
+
+      function ray(deg, r) {
+        var a = deg * Math.PI / 180;
+        return [PIVOT_X + r * Math.cos(a), PIVOT_Y - r * Math.sin(a)];
+      }
+      // Static geometry: tolerance wedge and its dashed edges.
+      (function () {
+        var lo = ray(TARGET - TOL, 360), hi = ray(TARGET + TOL, 360);
+        document.getElementById('tolwedge').setAttribute('d',
+          'M' + PIVOT_X + ' ' + PIVOT_Y + ' L' + lo[0] + ' ' + lo[1] +
+          ' A360 360 0 0 1 ' + hi[0] + ' ' + hi[1] + ' Z');
+        document.getElementById('tolwedge-lo').setAttribute('d',
+          'M' + PIVOT_X + ' ' + PIVOT_Y + ' L' + lo[0] + ' ' + lo[1]);
+        document.getElementById('tolwedge-hi').setAttribute('d',
+          'M' + PIVOT_X + ' ' + PIVOT_Y + ' L' + hi[0] + ' ' + hi[1]);
+      })();
+
+      function paint(angle) {
+        blade.setAttribute('transform',
+          'rotate(' + (-angle).toFixed(2) + ' ' + PIVOT_X + ' ' + PIVOT_Y + ')');
+        var col = COL.green, label = 'ON ANGLE — HOLD IT';
+        if (angle < TARGET - TOL)      { col = COL.blue; label = 'TOO LOW — RAISE THE SPINE'; }
+        else if (angle > TARGET + TOL) { col = COL.red;  label = 'TOO HIGH — LOWER IT'; }
+        screen.setAttribute('fill', col);
+        read.setAttribute('fill', col);
+        read.textContent = angle.toFixed(1) + '°';
+        state.setAttribute('fill', col);
+        state.textContent = label;
+        var p0 = ray(0, 116), p1 = ray(angle, 116);
+        arc.setAttribute('d', 'M' + p0[0] + ' ' + p0[1] +
+          ' A116 116 0 0 1 ' + p1[0] + ' ' + p1[1]);
+      }
+
+      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (reduced.matches) { paint(TARGET); return; }
+
+      // One teaching sweep (low -> high -> settle), then a gentle hand wobble.
+      // Timeline in seconds, angles in degrees; cosine-eased between keyframes.
+      var KEYS = [
+        [0.0,  9.0], [1.6, 17.0], [2.6, 23.5], [3.9, 17.0]   // sweep
+      ];
+      var SWEEP_END = 3.9;
+      var start = null;
+      function tick(ts) {
+        if (start === null) start = ts;
+        var t = (ts - start) / 1000;
+        var angle;
+        if (t < SWEEP_END) {
+          for (var i = 0; i < KEYS.length - 1; i++) {
+            if (t >= KEYS[i][0] && t <= KEYS[i + 1][0]) {
+              var f = (t - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0]);
+              f = 0.5 - 0.5 * Math.cos(f * Math.PI);
+              angle = KEYS[i][1] + (KEYS[i + 1][1] - KEYS[i][1]) * f;
+              break;
+            }
+          }
+        } else {
+          // settled: sub-degree tremor around target, like a steady hand
+          var w = t - SWEEP_END;
+          angle = TARGET + 0.7 * Math.sin(w * 1.9) * Math.cos(w * 0.7)
+                         + 0.25 * Math.sin(w * 5.3);
+        }
+        paint(angle);
+        requestAnimationFrame(tick);
+      }
+      paint(KEYS[0][1]);
+      requestAnimationFrame(tick);
+    })();
+  </script>
 </body>
 </html>

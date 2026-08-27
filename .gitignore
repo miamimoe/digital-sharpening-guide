@@ -23,3 +23,5 @@ CLAUDE.md
 
 # internal SDD scratch (progress ledger, review packages) — never publish
 .superpowers/
+# local editor/assistant config (launch.json for the docs preview server)
+.claude/

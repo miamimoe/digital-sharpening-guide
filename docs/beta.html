@@ -6,7 +6,9 @@
   <title>Beta — Digital Sharpening Guide</title>
   <meta name="description" content="Diagnostic and beta builds of the Digital Sharpening Guide firmware. Steady mode shipped in v0.3.0." />
   <meta name="robots" content="noindex, nofollow" />
-  <script type="module" src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"></script>
+  <!-- Self-hosted (docs/vendor/) rather than pulled from a CDN, so a modified
+       CDN response can never alter the firmware-install flow. -->
+  <script type="module" src="vendor/esp-web-tools-10.2.1/install-button.js"></script>
   <style>
     :root {
       --bg: #0d0f12;
