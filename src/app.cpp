@@ -188,6 +188,7 @@ void App::transition(State to, uint32_t now_ms) {
             // ACTIVE frame behind the progress screen.
             ui::clear();
             zc_fsm_.start();
+            capture_started_ms_ = now_ms;
             break;
         case State::ACTIVE: {
             stroke_fsm_.reset();
@@ -213,6 +214,10 @@ void App::transition(State to, uint32_t now_ms) {
                 r.duration_s     = (uint16_t)((dur_s > 65535u) ? 65535u : dur_s);
                 settings::push_session_record(r);
             }
+            // The session is over the moment SUMMARY is shown. Leaving it marked
+            // active in RTC RAM would resurrect it as RESUME after an idle-sleep
+            // on this screen — and re-finishing it would push a duplicate record.
+            if (from == State::ACTIVE) session::clear();
             ui::draw_summary(target_deg_, tol_, strokes_a_, strokes_b_, dur_s, green_pct());
             break;
         }
@@ -243,6 +248,13 @@ void App::refresh_gyro_bias_(Vec3 bias) {
     // starts each session with an accurate bias.
     filter_.set_bias(bias);
     settings::save_gyro_bias(bias);
+}
+
+void App::flush_session_for_sleep() {
+    // REZERO is still a live session (the zero refresh happens in place), so it
+    // flushes too. SUMMARY/SLEEP deliberately do not: those sessions are over
+    // and their RTC state was already cleared.
+    if (state_ == State::ACTIVE || state_ == State::REZERO) save_session_();
 }
 
 void App::save_session_() {
@@ -282,11 +294,20 @@ void App::handle_zero_cal(const Tick& t) {
         case ZeroCalSubstate::PROMPT_FLAT:
             if (input == InputEvent::A_SHORT) {
                 zc_fsm_.start();
+                capture_started_ms_ = t.now_ms;
                 zc_substate_ = ZeroCalSubstate::CAPTURE_FLAT;
             }
             break;
 
         case ZeroCalSubstate::CAPTURE_FLAT: {
+            // Abandoned capture: give up and fall back to the prompt. Resetting
+            // the FSM to IDLE stops the phase-based activity refresh below, so
+            // the device can finally idle out.
+            if (t.now_ms - capture_started_ms_ >= kCaptureTimeoutMs) {
+                zc_fsm_ = zero_cal::CaptureFSM{};
+                zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
+                break;
+            }
             // B = force-capture escape hatch (stillness gate can't pass).
             bool done = false;
             if (input == InputEvent::B_SHORT) {
@@ -307,11 +328,18 @@ void App::handle_zero_cal(const Tick& t) {
         case ZeroCalSubstate::PROMPT_RAISE:
             if (input == InputEvent::A_SHORT) {
                 zc_fsm_.start();
+                capture_started_ms_ = t.now_ms;
                 zc_substate_ = ZeroCalSubstate::CAPTURE_RAISE;
             }
             break;
 
         case ZeroCalSubstate::CAPTURE_RAISE: {
+            // Same abandoned-capture guard as CAPTURE_FLAT above.
+            if (t.now_ms - capture_started_ms_ >= kCaptureTimeoutMs) {
+                zc_fsm_ = zero_cal::CaptureFSM{};
+                zc_substate_ = ZeroCalSubstate::PROMPT_RAISE;
+                break;
+            }
             bool done = false;
             Vec3 raised = {0.0f, 0.0f, 0.0f};
             if (input == InputEvent::B_SHORT) {
@@ -457,6 +485,10 @@ void App::handle_active(const Tick& t) {
     // Skew-corrected bevel about the captured edge axis. One reference (g_flat_,
     // edge_axis_) serves both blade faces — the flipped face is folded internally.
     float bevel = bevel_angle(g_flat_, edge_axis_, g_now);
+    // Whether prev_color_ carries a real classification: it initializes to GREEN,
+    // so without this the first non-GREEN tick would read as a GREEN->non-GREEN
+    // edge and beep even though the user never left tolerance.
+    const bool had_prev_color = color_valid_;
     ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_),
                               prev_color_,
                               (steady_ && color_valid_) ? CLASSIFY_HYSTERESIS_DEG : 0.0f);
@@ -500,8 +532,9 @@ void App::handle_active(const Tick& t) {
         return;
     }
     if (t.input == InputEvent::A_SHORT) {
-        // Re-capture the current side's zero in place (e.g. after re-mounting or
-        // a bad side-B capture), then return to ACTIVE with the fresh reference.
+        // Re-capture g_flat_ in place (drift, or a bad flat capture), then return
+        // to ACTIVE with the fresh reference. Deliberately does NOT recapture
+        // edge_axis_ — see handle_rezero; a physical re-mount needs a full zero-cal.
         transition(State::REZERO, t.now_ms);
         return;
     }
@@ -526,8 +559,10 @@ void App::handle_active(const Tick& t) {
     }
 
     feedback::set_color(col);
-    // Beep only on the edge GREEN -> non-GREEN, not every tick.
-    if (buzzer_on_ && col != ColorState::GREEN && prev_color_ == ColorState::GREEN) {
+    // Beep only on the edge GREEN -> non-GREEN, not every tick — and only when
+    // prev_color_ is a real prior classification (see had_prev_color above).
+    if (buzzer_on_ && had_prev_color
+        && col != ColorState::GREEN && prev_color_ == ColorState::GREEN) {
         feedback::beep_out_of_tolerance();
     }
     prev_color_ = col;
@@ -541,9 +576,36 @@ void App::handle_active(const Tick& t) {
 }
 
 void App::handle_rezero(const Tick& t) {
-    // Abort (B short or long-press A) returns to ACTIVE leaving the zero unchanged.
-    if (t.input == InputEvent::B_SHORT || t.input == InputEvent::A_LONG) {
+    // Refreshes g_flat_ only — edge_axis_ is intentionally kept. A re-mount
+    // rotated about the blade normal leaves g_flat identical, so no single-pose
+    // recapture can recover the edge axis; re-zero corrects drift/reference
+    // errors in place, and a physical re-mount should go through SUMMARY ->
+    // new session -> full zero-cal.
+    //
+    // Abort (long-press A) returns to ACTIVE leaving the zero unchanged.
+    if (t.input == InputEvent::A_LONG) {
         ui::clear();   // invalidate the ACTIVE dirty-region cache for a clean repaint
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    // B = force-capture escape hatch, same as ZERO_CAL — the shared progress
+    // screen advertises "tap B to capture". No gyro-bias refresh here: a forced
+    // pose has no still window to average a bias from (matches the ZERO_CAL
+    // forced path). A degenerate accel means B does nothing this tick.
+    if (t.input == InputEvent::B_SHORT) {
+        Vec3 forced = normalized(t.accel_g);
+        if (!is_zero_vec(forced)) {
+            g_flat_ = forced;
+            ui::clear();
+            transition(State::ACTIVE, t.now_ms);
+        }
+        return;
+    }
+    // Abandoned re-zero (never settles): give up and return to ACTIVE with the
+    // zero unchanged, so the capture's activity refresh can't block sleep forever.
+    if (t.now_ms - capture_started_ms_ >= kCaptureTimeoutMs) {
+        zc_fsm_ = zero_cal::CaptureFSM{};
+        ui::clear();
         transition(State::ACTIVE, t.now_ms);
         return;
     }
@@ -603,10 +665,34 @@ void App::handle_verify(const Tick& t) {
 
     if (!verify_captured_) {
         if (zc_fsm_.phase() == zero_cal::Phase::IDLE) {
-            if (t.input == InputEvent::A_SHORT) zc_fsm_.start();
-            else { ui::draw_verify_prompt(); return; }
+            if (t.input == InputEvent::A_SHORT) {
+                zc_fsm_.start();
+                capture_started_ms_ = t.now_ms;
+            } else {
+                // Prompt is already painted (on entry, or once by the timeout
+                // below) — do not repaint it at 50 Hz.
+                return;
+            }
+        }
+        // Abandoned capture: give up and reset to the prompt instead of
+        // repainting the countdown at 50 Hz forever. transition() won't run
+        // again, so redraw the prompt once here.
+        if (t.now_ms - capture_started_ms_ >= kCaptureTimeoutMs) {
+            zc_fsm_ = zero_cal::CaptureFSM{};
+            ui::clear();
+            ui::draw_verify_prompt();
+            return;
         }
         zc_fsm_.update(t.accel_g, t.gyro_dps);
+        // Keep the idle clock honest during the capture, same as ZERO_CAL and
+        // REZERO: an in-progress capture (or a user handling the device) must
+        // not dim/sleep out from under the accuracy check. Bounded by the
+        // timeout above, so an abandoned capture still idles out.
+        zero_cal::Phase vph = zc_fsm_.phase();
+        if (zc_fsm_.moving()
+            || vph == zero_cal::Phase::WARMUP || vph == zero_cal::Phase::AVERAGING) {
+            last_activity_ms_ = t.now_ms;
+        }
         if (zc_fsm_.done()) {
             verify_ref_      = normalized(zc_fsm_.result());
             verify_captured_ = true;

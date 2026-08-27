@@ -54,7 +54,19 @@ void setup() {
             M5.Display.print("Flash the build that");
             M5.Display.setCursor(6, 68);
             M5.Display.print("matches your stick.");
-            while (true) { delay(1000); }
+            // Battery protection: this screen is terminal (the device needs a
+            // reflash), so don't hold full backlight on a ~120 mAh cell. Dim to
+            // a still-readable level now, display off entirely after a minute.
+            M5.Display.setBrightness(64);
+            const uint32_t shown_ms = millis();
+            bool display_off = false;
+            while (true) {
+                if (!display_off && millis() - shown_ms >= 60000) {
+                    M5.Display.sleep();
+                    display_off = true;
+                }
+                delay(1000);
+            }
         }
     }
 
@@ -117,6 +129,9 @@ void loop() {
     if (!pwr_released_since_boot) {
         if (!M5.BtnPWR.isPressed()) pwr_released_since_boot = true;
     } else if (M5.BtnPWR.wasClicked()) {
+        // A live session's tick counters exist only in App until flushed; sleep
+        // without this loses everything since the last stroke (RTC-RAM write only).
+        g_app.flush_session_for_sleep();
         power::enter_deep_sleep();
     }
     bool a_pressed = M5.BtnA.isPressed();
@@ -147,6 +162,10 @@ void loop() {
     if (power::check_idle(now, g_app.current(),
                           g_app.last_activity_ms(),
                           g_app.last_stroke_ms())) {
+        // Same as the BtnPWR path: don't drop unflushed session ticks. The
+        // State::SLEEP path below deliberately does NOT flush — that session
+        // was already closed and cleared by SUMMARY.
+        g_app.flush_session_for_sleep();
         power::enter_deep_sleep();
     }
     power::update_backlight(now, g_app.current(),

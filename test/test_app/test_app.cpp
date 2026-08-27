@@ -4,6 +4,7 @@
 #include "angle.h"
 #include "settings.h"
 #include "session.h"
+#include "feedback.h"
 
 // On-target pose: 17 deg about the edge axis (body +x) from flat {0,0,-1}.
 // = {0, sin17, -cos17}. With edge_axis={1,0,0} this reads a 17 deg bevel.
@@ -27,6 +28,20 @@ static void drive_still(App& a, uint32_t& t, Vec3 still_accel = {0.0f, 0.0f, -1.
     advance(a, t, 1600, InputEvent::NONE, still_accel, {0.0f, 0.0f, 0.0f});
 }
 
+// Drive dur_ms of ticks whose accel direction flips every 50 ms, so the capture
+// stillness gate never passes and the CaptureFSM keeps restarting warmup.
+static void drive_moving(App& a, uint32_t& t, uint32_t dur_ms) {
+    const Vec3 pose_a = {0.0f,    0.0f, -1.0f};
+    const Vec3 pose_b = {0.7071f, 0.0f, -0.7071f};
+    uint32_t end = t + dur_ms;
+    while (t < end) {
+        t += 10;
+        Vec3 acc = ((t / 50) % 2 == 0) ? pose_a : pose_b;
+        App::Tick tick{t, InputEvent::NONE, acc, {0.0f, 0.0f, 0.0f}, FaultCode::NONE};
+        a.on_tick(tick);
+    }
+}
+
 // From ZERO_CAL/PROMPT_FLAT: capture flat then raise, landing in ACTIVE.
 static void zero_cal_flat_raise(App& a, uint32_t& t, Vec3 flat_pose, Vec3 raise_pose) {
     advance(a, t, 100, InputEvent::A_SHORT, flat_pose);   // -> CAPTURE_FLAT
@@ -40,6 +55,7 @@ void setUp(void) {
     settings::save_buzzer(false);
     session::clear();
     settings::clear_session_history();   // keep tests order-independent
+    feedback::test_reset_beep_count();
 }
 void tearDown(void) {}
 
@@ -680,11 +696,151 @@ void test_rezero_abort_leaves_flat_unchanged(void) {
     reach_active(a, t);
     advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
     TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
-    advance(a, t, 300, InputEvent::NONE,    {0.0f, 0.5f, -0.8660254f}, {0,0,0});
-    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.5f, -0.8660254f}, {0,0,0});  // abort
+    advance(a, t, 300, InputEvent::NONE,   {0.0f, 0.5f, -0.8660254f}, {0,0,0});
+    advance(a, t, 100, InputEvent::A_LONG, {0.0f, 0.5f, -0.8660254f}, {0,0,0});  // abort
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
     Vec3 gf = a.g_flat();
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, gf.z);   // unchanged
+}
+
+void test_rezero_b_force_captures(void) {
+    // The progress screen (shared with ZERO_CAL) says "or tap B to capture", so
+    // B must force-capture the current pose exactly like the ZERO_CAL escape
+    // hatch — not abort. Abort is A-long (asserted above).
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);                       // g_flat = {0,0,-1}
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
+    // Present a new pose (not held long enough for the gate to complete),
+    // then tap B: the normalized current accel becomes the new flat reference.
+    advance(a, t, 300, InputEvent::NONE,    {0.0f, 0.6f, -0.8f}, {0,0,0});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.6f, -0.8f}, {0,0,0});
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    Vec3 gf = a.g_flat();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f,  0.6f, gf.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, -0.8f, gf.z);
+}
+
+void test_summary_entry_clears_rtc_session(void) {
+    // The session is over the moment SUMMARY is shown. If it stayed marked
+    // active in RTC RAM, an idle-sleep on the SUMMARY screen would offer
+    // RESUME of a finished session on the next wake.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 1000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> SUMMARY
+    TEST_ASSERT_EQUAL_INT((int)State::SUMMARY, (int)a.current());
+    TEST_ASSERT_FALSE(session::has_session());
+}
+
+void test_wake_after_summary_sleep_does_not_duplicate_record(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 1000, InputEvent::NONE, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_LONG);          // -> SUMMARY (records once)
+    // Idle-sleep on SUMMARY, then wake: no session left in RTC RAM, so the
+    // wake path must land in a normal BOOT — not RESUME, and never a second
+    // trip through the record push.
+    App b;
+    b.begin(true);
+    TEST_ASSERT_EQUAL_INT((int)State::BOOT, (int)b.current());
+    SessionRecord recs[kSessionHistoryMax];
+    TEST_ASSERT_EQUAL_INT(1, settings::load_session_history(recs, kSessionHistoryMax));
+}
+
+void test_zero_cal_capture_times_out_to_prompt(void) {
+    // A capture that never completes (device jostled in a bag keeps restarting
+    // warmup) must give up after a minute, or the phase-based activity gate
+    // holds the device awake until the cell is flat.
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL (PROMPT_FLAT)
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> CAPTURE_FLAT
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::CAPTURE_FLAT, (int)a.zero_cal_substate());
+    drive_moving(a, t, 61000);                 // never still for a whole minute
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_FLAT, (int)a.zero_cal_substate());
+    // Back on the prompt, quiet ticks must leave the idle clock frozen so the
+    // device can finally dim and sleep.
+    uint32_t frozen = a.last_activity_ms();
+    advance(a, t, 35000, InputEvent::NONE, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_UINT32(frozen, a.last_activity_ms());
+}
+
+void test_rezero_capture_times_out_to_active(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);                       // g_flat = {0,0,-1}
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
+    drive_moving(a, t, 61000);                 // abandoned re-zero
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, a.g_flat().z);   // zero unchanged
+}
+
+void test_verify_capture_refreshes_activity_and_times_out(void) {
+    // The VERIFY capture must hold the idle clock while it progresses (same as
+    // ZERO_CAL/REZERO — no dim/sleep mid-capture), but still give up after the
+    // timeout so an abandoned check can idle out from the static prompt.
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_LONG);    // -> VERIFY
+    advance(a, t, 100, InputEvent::A_SHORT);   // start the capture
+    // Mid-capture (moving, so it never completes): activity must track now.
+    drive_moving(a, t, 30000);
+    TEST_ASSERT_TRUE(t - a.last_activity_ms() < 1000);
+    drive_moving(a, t, 31000);                 // past the 60 s timeout
+    TEST_ASSERT_EQUAL_INT((int)State::VERIFY, (int)a.current());
+    // Back on the static prompt: quiet ticks leave the idle clock frozen.
+    uint32_t frozen = a.last_activity_ms();
+    advance(a, t, 35000, InputEvent::NONE, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_UINT32(frozen, a.last_activity_ms());
+}
+
+void test_no_beep_on_first_active_tick(void) {
+    // prev_color_ initializes to GREEN; the first classification landing
+    // non-GREEN must not fire the out-of-tolerance beep — the user never
+    // actually left tolerance.
+    settings::save_buzzer(true);
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);                                     // flat pose = far below 17
+    advance(a, t, 200, InputEvent::NONE, {0.0f, 0.0f, -1.0f});
+    TEST_ASSERT_EQUAL_INT(0, feedback::test_beep_out_count());
+}
+
+void test_beep_fires_on_green_to_nongreen_edge(void) {
+    settings::save_buzzer(true);
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 2000, InputEvent::NONE, g_now_at_target_17);   // settle into green
+    feedback::test_reset_beep_count();          // count only the edge below
+    advance(a, t, 2000, InputEvent::NONE, {0.0f, 0.0f, -1.0f});  // leave tolerance
+    TEST_ASSERT_EQUAL_INT(1, feedback::test_beep_out_count());
+}
+
+void test_flush_for_sleep_persists_tick_counters(void) {
+    // RTC RAM is only updated per stroke / side toggle; a sleep from ACTIVE
+    // must flush the tick counters or everything since the last stroke is lost.
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 2000, InputEvent::NONE, g_now_at_target_17);   // ~2 s, no strokes
+    a.flush_session_for_sleep();
+    const SessionState& s = session::state();
+    TEST_ASSERT_TRUE(s.active_ticks > 0);
+    TEST_ASSERT_TRUE(s.green_ticks > 0);
+    // Flushed counters must be the live ones, not a stale per-stroke snapshot.
+    TEST_ASSERT_EQUAL_UINT32(a.duration_s(), (s.active_ticks * kLoopTickMs) / 1000u);
 }
 
 int main(int, char**) {
@@ -735,5 +891,14 @@ int main(int, char**) {
     RUN_TEST(test_e2e_manual_side_switch_sticks);
     RUN_TEST(test_rezero_updates_flat_reference);
     RUN_TEST(test_rezero_abort_leaves_flat_unchanged);
+    RUN_TEST(test_rezero_b_force_captures);
+    RUN_TEST(test_summary_entry_clears_rtc_session);
+    RUN_TEST(test_wake_after_summary_sleep_does_not_duplicate_record);
+    RUN_TEST(test_zero_cal_capture_times_out_to_prompt);
+    RUN_TEST(test_rezero_capture_times_out_to_active);
+    RUN_TEST(test_verify_capture_refreshes_activity_and_times_out);
+    RUN_TEST(test_no_beep_on_first_active_tick);
+    RUN_TEST(test_beep_fires_on_green_to_nongreen_edge);
+    RUN_TEST(test_flush_for_sleep_persists_tick_counters);
     return UNITY_END();
 }

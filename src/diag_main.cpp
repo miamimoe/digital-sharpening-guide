@@ -17,8 +17,9 @@
 //     below), which is the open question for the anti-alias work.
 //
 // Usage: flash the environment that MATCHES YOUR BOARD —
-//   [env:diag]     M5StickC Plus / Plus2  (MPU6886)
-//   [env:diag-s3]  M5StickS3              (BMI270)
+//   [env:diag]        M5StickC Plus   (MPU6886)
+//   [env:diag-plus2]  M5StickC Plus2  (MPU6886)
+//   [env:diag-s3]     M5StickS3       (BMI270)
 // then open the serial monitor at 115200, hold the device still at your angle
 // for the reference capture, and sharpen normally while reading the columns.
 // Flashing the Plus build onto an S3 (or the reverse) trips the WRONG FIRMWARE

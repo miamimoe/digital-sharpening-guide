@@ -18,6 +18,11 @@ public:
     void      begin(bool had_session_in_rtc_ram);
     void      on_tick(const Tick& t);
     State     current() const { return state_; }
+    // Called by the main loop just before entering deep sleep from a live
+    // session, so the tick counters accumulated since the last stroke are not
+    // lost (RTC RAM is otherwise only updated per stroke / side toggle).
+    // RTC-RAM write only — no NVS wear.
+    void      flush_session_for_sleep();
 
     // Test-only and main-loop accessors
     float     target_deg()       const { return target_deg_; }
@@ -77,8 +82,16 @@ private:
     Vec3             g_flat_               = {0.0f, 0.0f, 0.0f};  // flat-on-stone reference
     Vec3             edge_axis_            = {0.0f, 0.0f, 0.0f};  // cutting-edge / hinge axis
 
+    // A capture that never completes (device jostled in a bag keeps restarting
+    // warmup) refreshes the activity gate forever and would drain the cell.
+    // Any live capture older than this gives up (see the capture handlers).
+    static constexpr uint32_t kCaptureTimeoutMs = 60000;
+
     // ZERO_CAL substate machinery
     ZeroCalSubstate  zc_substate_          = ZeroCalSubstate::PROMPT_FLAT;
+    // When the current live capture began (set at every zc_fsm_.start()),
+    // for the abandoned-capture timeout above.
+    uint32_t         capture_started_ms_   = 0;
     // Which prompt substate is currently painted, so the (static) prompt screen
     // is redrawn only on change instead of full-screen every 50 Hz tick.
     ZeroCalSubstate  zc_rendered_          = ZeroCalSubstate::DONE;

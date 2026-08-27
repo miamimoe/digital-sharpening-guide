@@ -55,10 +55,13 @@ void beep_confirm() {
 #else
 // Native stubs
 namespace feedback {
+    static int g_beep_out_count = 0;
     void begin() {}
     void set_color(ColorState) {}
     void fault_led() {}
-    void beep_out_of_tolerance() {}
+    void beep_out_of_tolerance() { ++g_beep_out_count; }
     void beep_confirm() {}
+    int  test_beep_out_count()  { return g_beep_out_count; }
+    void test_reset_beep_count() { g_beep_out_count = 0; }
 }
 #endif

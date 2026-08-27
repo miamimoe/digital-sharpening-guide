@@ -109,7 +109,7 @@ void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v1.0.1", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.0.2", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -178,6 +178,12 @@ void draw_active(const ActiveView& v) {
     // The buzzer overlay sits over the lower band; when it clears (or a color
     // change wiped the screen) we must repaint the numbers it covered.
     bool flash_ended = s_last_valid && s_last.buzzer_flash && !v.buzzer_flash;
+    // The number repaints below do not cover the whole overlay rect (left-column
+    // rows 96-126 under x<120 would stay black), so erase it first. A color
+    // change already wiped the full screen.
+    if (flash_ended && !color_changed) {
+        M5.Display.fillRect(30, 96, 180, 30, bg);
+    }
 
     // Right column: current-side stroke count (big) + other-side count (small).
     if (color_changed || counts_changed || flash_ended) {
