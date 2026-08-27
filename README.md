@@ -24,11 +24,20 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v1.0.1
+## What's new in v1.0.2
+
+**A round of fixes from a full code audit.** No new features — five behavioral bugs and four cosmetic ones, all found in a line-by-line review of v1.0.0 and fixed test-first:
+
+- **Re-zero now does what the screen says.** During an in-place re-zero, tapping **B** force-captures the reference — exactly as the "tap B to capture" hint promises. (It used to silently cancel instead.) To cancel a re-zero, **hold A**.
+- **No duplicate history entries.** If the device went to sleep while showing the session summary, the finished session could be offered for "resume" and end up recorded twice. A finished session now stays finished.
+- **An abandoned calibration can't drain the battery.** A capture that never completes — say the device ends up jostling around in a bag — used to hold the device awake indefinitely. It now gives up after a minute and lets normal auto-sleep take over. (The same guard covers re-zero and the accuracy check, and the accuracy check now correctly stays awake *while* a capture is actually progressing.)
+- **No stray beep at session start.** With the buzzer on, the first moment of a session no longer beeps as if you'd just fallen off the angle.
+- **Sleep keeps your stats.** Session time and time-on-angle accumulated since your last stroke are no longer lost when the device sleeps mid-session (idle or power button).
+- Cosmetic: the accuracy-check prompt no longer repaints at 50 Hz, the buzzer on/off overlay no longer leaves a black box behind on the color screen, the WRONG FIRMWARE screen dims (and later sleeps the display) to protect the battery, and Plus2 owners get their own [diagnostic build](https://miamimoe.github.io/digital-sharpening-guide/beta.html).
+
+### From v1.0.1
 
 **A bug fix for the battery icon.** On a fully charged device the icon showed up empty for the first ten seconds after boot. The power chip's battery sensor only starts sampling when the firmware boots, so the very first reading — taken milliseconds later — usually had no measurement behind it, and that empty answer was being drawn as a flat battery and then cached. The firmware now recognises an impossible reading, shows the dash instead, and retries until a real measurement arrives, which takes about a second.
-
-Nothing else changed; everything below is as it shipped in v1.0.0.
 
 ### From v1.0.0
 
@@ -159,7 +168,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
    - **Step 2/2 — "Raise to your angle":** lift the spine to roughly your sharpening angle, press **A**, hold still.
    - *(If it says "KEEP STILL", just set it down for a second — or tap **B** to force the capture.)*
 5. **Sharpen.** The whole screen turns **green / blue / red**. Chase green. The center number is your stroke count for the current side.
-6. **Switch sides.** When you flip the knife to sharpen the other face, **press B** to switch the device to the other side — that side's stroke count picks up where it left off. *(If the angle reads off after re-mounting, short-press **A** to re-zero in place.)*
+6. **Switch sides.** When you flip the knife to sharpen the other face, **press B** to switch the device to the other side — that side's stroke count picks up where it left off. *(If the angle has drifted, short-press **A** to re-zero the flat reference in place — lay the blade flat and hold still, or tap **B** to force the capture. If you physically re-stuck the device somewhere else on the blade, end the session and calibrate fresh instead: the in-place re-zero can't recover the edge axis for a new mount.)*
 7. **End the session.** **Long-press A** → `SESSION` summary (target, tolerance, strokes per side, time, time on-angle). Press **A** for a new session, **hold B** for your last five sessions, or **B** to sleep.
 
 ### Controls
@@ -199,14 +208,15 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 |---|---|
 | Browser flasher can't see the device | Use desktop Chrome/Edge/Opera, try a different **data** USB-C cable, and install the [CP210x driver](https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers). |
 | Screen stuck on **"KEEP STILL"** during calibration | Set the device down on the bench for a second so it can capture — or tap **B** to force the capture. |
-| Angle reads wrong / drifted after re-mounting or flipping the knife | Short-press **A** to re-zero in place. |
+| Angle reads drifted after flipping the knife | Short-press **A** to re-zero in place (lay flat, hold still — or tap **B** to force it). |
+| Angle reads wrong after re-sticking the device on the blade | End the session (**hold A**, then **A**) and run the two-step calibration again — a re-mount moves the edge axis, which the in-place re-zero deliberately doesn't touch. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
 | Stroke count is off by a few | Known — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
 | Plus2 wakes, then sleeps when you let go of the power key | Fixed in v0.3.0 — it now ignores that wake press. Re-flash from the [flasher](https://miamimoe.github.io/digital-sharpening-guide/). |
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v1.0.1)
+## Known limitations (v1.0.2)
 
 - Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
