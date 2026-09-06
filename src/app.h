@@ -49,6 +49,9 @@ public:
     Vec3             edge_axis()         const { return edge_axis_; }
     float            cal_raise_deg()     const { return cal_raise_deg_; }
     float            cal_skew_deg()      const { return cal_skew_deg_; }
+    // Filter's current bevel — used by tests to assert ACTIVE starts on the
+    // captured raise instead of crawling down from a stale orientation.
+    float            live_bevel()        const;
 
 private:
     void transition(State to, uint32_t now_ms);
@@ -64,7 +67,6 @@ private:
     void handle_summary         (const Tick& t);
     void handle_history         (const Tick& t);
     void handle_resume_prompt   (const Tick& t);
-    void handle_cal_result      (const Tick& t);
 
     void apply_adaptive_tau_(const Tick& t);
     void sample_live_(const Tick& t, float& bevel, float& lat, ColorState& col);

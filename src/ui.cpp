@@ -55,6 +55,8 @@ namespace {
     bool s_last_zc_tenths_valid = false;
     bool s_last_zc_moving        = false;
     int         s_last_error_px    = -999;
+    float       s_bubble_f         = 0.0f;
+    bool        s_bubble_valid     = false;
 
     uint16_t color_for(ColorState c) {
         switch (c) {
@@ -77,6 +79,45 @@ namespace {
         M5.Display.print(s);
     }
 
+    // Tiny hint under the hero angle. Dark tube only — no color fill.
+    constexpr int VIAL_X = 92;
+    constexpr int VIAL_Y = 107;
+    constexpr int VIAL_W = 56;
+    constexpr int VIAL_H = 5;
+    constexpr int BUBBLE_R = 1;
+
+    int vial_mid()    { return VIAL_X + VIAL_W / 2; }
+    int vial_travel() { return VIAL_W / 2 - BUBBLE_R - 3; }
+    int vial_cy()     { return VIAL_Y + VIAL_H / 2; }
+
+    int clamp_bubble(int cx) {
+        const int lo = VIAL_X + BUBBLE_R + 2;
+        const int hi = VIAL_X + VIAL_W - BUBBLE_R - 3;
+        if (cx < lo) return lo;
+        if (cx > hi) return hi;
+        return cx;
+    }
+
+    void draw_vial_marks() {
+        // One center tick — a 5 px tube has no room for the old hash marks.
+        M5.Display.fillRect(vial_mid(), VIAL_Y + 1, 1, VIAL_H - 2, COL_WHITE);
+    }
+
+    void draw_vial_track() {
+        M5.Display.fillRoundRect(VIAL_X, VIAL_Y, VIAL_W, VIAL_H, VIAL_H / 2, COL_BLACK);
+        M5.Display.drawRoundRect(VIAL_X, VIAL_Y, VIAL_W, VIAL_H, VIAL_H / 2, COL_WHITE);
+        draw_vial_marks();
+    }
+
+    void draw_bubble(int cx) {
+        M5.Display.fillCircle(cx, vial_cy(), BUBBLE_R, COL_WHITE);
+    }
+
+    void erase_bubble(int cx) {
+        M5.Display.fillCircle(cx, vial_cy(), BUBBLE_R, COL_BLACK);
+        draw_vial_marks();
+    }
+
 }
 
 namespace ui {
@@ -95,13 +136,14 @@ void clear() {
     s_shown_valid = false;
     s_last_verify_valid = false;
     s_last_error_px = -999;
+    s_bubble_valid  = false;
 }
 
 void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v1.1.1", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.1.2", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -136,24 +178,16 @@ void draw_set_tolerance(Tolerance tol, bool steady) {
 }
 
 void draw_active(const ActiveView& v) {
-    // Angle is the coach. Stroke count is a small hint — the detector is a
-    // factory guess and is not accurate enough to share the screen.
-    constexpr int NUM_Y  = 36;
-    constexpr int NUM_SZ = 5;
-    constexpr int SUB_Y  = 118;
+    // Angle is the coach. The full-screen color already says low/ok/high, so
+    // there is no legend — that row is number now. Stroke count stays a hint.
+    constexpr int NUM_Y  = 16;   // just under the 10 px battery icon
+    constexpr int NUM_SZ = 11;   // 88 px tall; 1–2 digits fill the panel
+    constexpr int SUB_Y  = 124;
     const uint16_t bg = color_for(v.color);
 
     bool color_changed = !s_last_valid || s_last.color != v.color;
     if (color_changed) {
         wipe(bg);
-        M5.Display.fillRect(8,   4, 12, 12, COL_BLUE);
-        M5.Display.fillRect(78,  4, 12, 12, COL_GREEN);
-        M5.Display.fillRect(146, 4, 12, 12, COL_RED);
-        M5.Display.setTextColor(COL_WHITE);
-        M5.Display.setTextSize(1);
-        M5.Display.setCursor(24,  6); M5.Display.print("LOW");
-        M5.Display.setCursor(94,  6); M5.Display.print("OK");
-        M5.Display.setCursor(162, 6); M5.Display.print("HIGH");
     }
 
     bool counts_changed =
@@ -162,7 +196,8 @@ void draw_active(const ActiveView& v) {
         s_last.strokes_B != v.strokes_B;
     bool flash_ended = s_last_valid && s_last.buzzer_flash && !v.buzzer_flash;
     if (flash_ended && !color_changed) {
-        M5.Display.fillRect(20, 92, 200, 36, bg);
+        M5.Display.fillRect(30, 104, 180, 18, bg);
+        s_last_error_px = -999;
     }
 
     // Live angle as a whole number. Rounding alone is not enough —
@@ -181,33 +216,43 @@ void draw_active(const ActiveView& v) {
     }
     char abuf[12];
     std::snprintf(abuf, sizeof abuf, "%ld", std::lround(s_shown_deg));
+    // Size 11 is 198 px wide at 3 digits and would clip the battery. Typical
+    // bevels are 1–2 digits; drop a step only when the string grows.
+    const int num_sz = (abuf[1] != '\0' && abuf[2] != '\0') ? 9 : NUM_SZ;
     if (color_changed || flash_ended
         || !s_last_angle_valid || std::strcmp(abuf, s_last_angle) != 0) {
         M5.Display.fillRect(0, NUM_Y, SCR_W, 8 * NUM_SZ, bg);
-        draw_centered(abuf, NUM_Y, NUM_SZ, COL_WHITE, bg);
+        draw_centered(abuf, NUM_Y, num_sz, COL_WHITE, bg);
         std::strncpy(s_last_angle, abuf, sizeof s_last_angle - 1);
         s_last_angle[sizeof s_last_angle - 1] = '\0';
         s_last_angle_valid = true;
     }
 
-    // Signed error tick: left = too low, right = too high. Scaled so
-    // +-1.5 * tolerance fills the bar.
     {
-        constexpr int BAR_Y = 88, BAR_X = 40, BAR_W = 160, BAR_H = 6;
         float span = v.tol_deg * 1.5f;
         if (span < 1.0f) span = 1.0f;
         float n = v.error_deg / span;
         if (n >  1.0f) n =  1.0f;
         if (n < -1.0f) n = -1.0f;
-        int mid    = BAR_X + BAR_W / 2;
-        int tick_x = mid + (int)(n * (float)(BAR_W / 2 - 3));
-        if (color_changed || flash_ended || tick_x != s_last_error_px) {
-            M5.Display.fillRect(BAR_X - 1, BAR_Y, BAR_W + 2, BAR_H, bg);
-            M5.Display.fillRect(BAR_X, BAR_Y + 2, BAR_W, 2, COL_WHITE);
-            M5.Display.fillRect(mid, BAR_Y, 2, BAR_H, COL_WHITE);
-            M5.Display.fillRect(tick_x - 1, BAR_Y, 4, BAR_H, COL_BLACK);
-            M5.Display.drawRect(tick_x - 1, BAR_Y, 4, BAR_H, COL_WHITE);
-            s_last_error_px = tick_x;
+        const float target_f = (float)clamp_bubble(
+            vial_mid() + (int)(n * (float)vial_travel()));
+        // Illustrative only. A ~1.5 s lag plus a 6 px step hides tremor;
+        // the big angle number is what the user actually follows.
+        if (!s_bubble_valid) {
+            s_bubble_f     = target_f;
+            s_bubble_valid = true;
+        } else {
+            s_bubble_f += (target_f - s_bubble_f) * 0.02f;
+        }
+        int bubble_cx = clamp_bubble(((int)(s_bubble_f + 3.0f) / 6) * 6);
+        if (color_changed || flash_ended) {
+            draw_vial_track();
+            draw_bubble(bubble_cx);
+            s_last_error_px = bubble_cx;
+        } else if (bubble_cx != s_last_error_px) {
+            erase_bubble(s_last_error_px);
+            draw_bubble(bubble_cx);
+            s_last_error_px = bubble_cx;
         }
     }
 
@@ -222,9 +267,11 @@ void draw_active(const ActiveView& v) {
 
     if (v.buzzer_flash && (!s_last_valid || !s_last.buzzer_flash
                            || color_changed || counts_changed)) {
-        M5.Display.fillRect(30, 96, 180, 30, COL_BLACK);
+        M5.Display.fillRect(30, 104, 180, 18, COL_BLACK);
         const char* msg = v.buzzer_flash_on ? "BUZZER ON" : "BUZZER OFF";
-        draw_centered(msg, 102, 2, COL_WHITE, COL_BLACK);
+        draw_centered(msg, 108, 1, COL_WHITE, COL_BLACK);
+        s_last_error_px = -999;
+        s_bubble_valid  = false;
     }
 
     s_last       = v;
@@ -374,17 +421,6 @@ void draw_zero_cal_prompt(int step, bool raise_more) {
     }
 }
 
-void draw_cal_result(float raise_deg, float skew_deg) {
-    wipe(COL_BLACK);
-    draw_centered("AXIS OK", 10, 3, COL_GREEN, COL_BLACK);
-    char buf[28];
-    std::snprintf(buf, sizeof buf, "raise %d deg", (int)(raise_deg + 0.5f));
-    draw_centered(buf, 52, 2, COL_WHITE, COL_BLACK);
-    std::snprintf(buf, sizeof buf, "skew %d deg - ok", (int)(skew_deg + 0.5f));
-    draw_centered(buf, 80, 1, COL_WHITE, COL_BLACK);
-    draw_centered("A:Go", 118, 1, COL_WHITE, COL_BLACK);
-}
-
 void draw_zero_cal_progress(int remaining_ms, bool moving) {
     int tenths = remaining_ms / 100;
     if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths && moving == s_last_zc_moving) return;
@@ -471,7 +507,6 @@ namespace ui {
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
     void draw_zero_cal_prompt(int, bool) {}
     void draw_zero_cal_progress(int, bool) {}
-    void draw_cal_result(float, float) {}
     void draw_battery(int, bool) {}
     void set_backlight(uint8_t) {}
 }

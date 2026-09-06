@@ -11,8 +11,8 @@ namespace ui {
         bool       buzzer_flash_on;
         float      angle_deg;         // live sharpening angle (secondary readout)
         bool       steady;            // hold the shown degree against sub-degree chatter
-        float      error_deg;         // bevel - target; signed tick under ANGLE
-        float      tol_deg;           // half-width used to scale that tick
+        float      error_deg;         // bevel - target; signed vial bubble under ANGLE
+        float      tol_deg;           // half-width used to scale that vial
     };
 
     void begin();
@@ -35,7 +35,6 @@ namespace ui {
 
     // step: 1 (side A) or 2 (side B). retry: true if last attempt failed stillness gate.
     void draw_zero_cal_prompt(int step, bool raise_more);
-    void draw_cal_result(float raise_deg, float skew_deg);
     // remaining_ms: time left in current capture window (warmup + averaging combined).
     // moving: device is not still this tick (gate failing) — show a motion warning
     // so a frozen-looking countdown is understood as "you're moving it".

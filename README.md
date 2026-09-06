@@ -24,18 +24,26 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v1.1.1
+## What's new in v1.1.2
+
+**The coach starts on the angle you just raised to. The number is bigger.**
+
+- **No AXIS OK screen.** A good raise goes straight into the live coach. That screen was a leftover diagnostic (raise vs skew) and never changed the reading. A raise under 8° still stays on step 2 (`RAISE MORE`).
+- **First number is the raised angle.** The filter used to start from a stale pose, so the reading counted down from 40–90° for about a second. It now snaps to the pose you just captured.
+- **Bigger angle, smaller vial.** The LOW / OK / HIGH legend is gone — the full-screen color already says that. Typical 1–2 digit bevels fill the panel. The spirit-level is a thin hint underneath.
+
+[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
+
+### From v1.1.1
 
 **Side changes are back on a button. Stroke count is a small hint again.**
 
 - **Front button flips the side.** Short-press **A** (the big button next to the screen) to switch A ↔ B. No more peel prompt.
 - **Side button re-zeros.** Short-press **B** to recapture the flat reference in place. Hold **A** to end the session.
 - **Stroke count is small.** Factory peak detection is back; the number sits at the bottom of the main screen because it is a hint, not a score.
-- **Loud calibration stays.** A raise under 8° is still refused (`RAISE MORE`). A good raise still shows `AXIS OK`. Adaptive smoothing and the error tick stay too.
+- **Loud calibration.** A raise under 8° is refused (`RAISE MORE`). Adaptive smoothing and the error tick stay too.
 
 v1.1.0 tried automatic side-detect and a “learn your stroke” screen. Both missed on a real knife, so they are gone.
-
-[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
 
 ### From v1.0.2
 
@@ -179,7 +187,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 4. **Zero-calibrate (2 quick steps).** This is what makes it angle-accurate regardless of how the device is rotated on the blade:
    - **Step 1/2 — "Lay flat on stone":** rest the blade flat on your stone, press **A**, hold still for the countdown.
    - **Step 2/2 — "Raise to your angle":** lift the spine to roughly your sharpening angle, press **A**, hold still. A raise under 8° is refused (`RAISE MORE`) — lift higher and try again.
-   - You'll see **AXIS OK** with the captured raise and skew, then the live coach.
+   - A good raise drops you straight into the live coach. A raise under 8° stays on this step (`RAISE MORE`).
    - *(If it says "KEEP STILL", just set it down for a second — or tap **B** to force the capture.)*
 5. **Sharpen.** The whole screen turns **green / blue / red**. Chase green. A small tick under the angle shows which way you are off. The small letter + number at the bottom is the current side and a rough stroke hint.
 6. **Switch sides.** Flip the knife, then **press A** (the big front button) to switch to the other side. *(If the angle has drifted, short-press **B** to re-zero the flat reference in place. If you physically re-stuck the device somewhere else on the blade, end the session and run zero-cal again — a remount moves the edge axis.)*
@@ -230,7 +238,7 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v1.1.1)
+## Known limitations (v1.1.2)
 
 - Stroke-count thresholds are a factory guess. A very light or very heavy hand can be off by a pass or two — the number is a hint.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.

@@ -16,7 +16,6 @@ enum class State : uint8_t {
     SET_TARGET,
     SET_TOLERANCE,
     ZERO_CAL,                  // NEW
-    CAL_RESULT,                // show raise/skew after a successful zero-cal
     ACTIVE,
     REZERO,                    // re-capture current side's zero from within ACTIVE
     VERIFY,                    // check the reading against a known angle (accuracy check)

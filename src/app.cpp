@@ -185,9 +185,6 @@ void App::transition(State to, uint32_t now_ms) {
             // Re-entering ZERO_CAL mid-session must not wipe stroke counts.
             zero_cal_keep_stats_ = (from == State::ACTIVE);
             break;
-        case State::CAL_RESULT:
-            ui::draw_cal_result(cal_raise_deg_, cal_skew_deg_);
-            break;
         case State::REZERO:
             // Repaint from scratch: clearing also invalidates the zero-cal
             // progress throttle cache, so entering REZERO never shows a stale
@@ -260,12 +257,14 @@ void App::flush_session_for_sleep() {
     // REZERO is still a live session (the zero refresh happens in place), so it
     // flushes too. SUMMARY/SLEEP deliberately do not: those sessions are over
     // and their RTC state was already cleared.
-    // Only a live session is resumable. CAL_RESULT has a zero but the
-    // session has not started yet — saving here would wake into ACTIVE
-    // and skip the AXIS OK screen.
+    // Only a live session is resumable.
     if (state_ == State::ACTIVE || state_ == State::REZERO) {
         save_session_();
     }
+}
+
+float App::live_bevel() const {
+    return bevel_angle(g_flat_, edge_axis_, filter_.gravity());
 }
 
 void App::save_session_() {
@@ -380,7 +379,8 @@ void App::handle_zero_cal(const Tick& t) {
                     side_fsm_.reset();
                     stroke_fsm_.reset();
                 }
-                transition(State::CAL_RESULT, t.now_ms);
+                filter_.nudge_to_gravity(raised);
+                transition(State::ACTIVE, t.now_ms);
             }
             break;
         }
@@ -519,6 +519,22 @@ void App::sample_live_(const Tick& t, float& bevel, float& lat, ColorState& col)
 }
 
 void App::handle_active(const Tick& t) {
+    // Filter starts at identity (or a stale pose). Without this, the first
+    // seconds of ACTIVE crawl down from a nonsense angle while Mahony
+    // converges. Only snap when the sample looks like gravity — a moving
+    // first frame would overwrite the pose we just captured at raise.
+    if (!color_valid_) {
+        const float gyro_mag = std::sqrt(t.gyro_dps.x*t.gyro_dps.x
+                                       + t.gyro_dps.y*t.gyro_dps.y
+                                       + t.gyro_dps.z*t.gyro_dps.z);
+        const float a_mag = std::sqrt(t.accel_g.x*t.accel_g.x
+                                    + t.accel_g.y*t.accel_g.y
+                                    + t.accel_g.z*t.accel_g.z);
+        if (gyro_mag < mahony::SNAP_GYRO_DPS
+            && std::fabs(a_mag - 1.0f) < mahony::SNAP_ACCEL_TOL_G) {
+            filter_.nudge_to_gravity(t.accel_g);
+        }
+    }
     float bevel = 0.0f, lat = 0.0f;
     ColorState col = ColorState::GREEN;
     sample_live_(t, bevel, lat, col);
@@ -581,13 +597,6 @@ void App::handle_active(const Tick& t) {
                       bevel - target_deg_,
                       tolerance_degrees(tol_) };
     ui::draw_active(v);
-}
-
-void App::handle_cal_result(const Tick& t) {
-    if (t.input == InputEvent::A_SHORT || t.input == InputEvent::B_SHORT
-        || t.now_ms - state_entered_ms_ >= 2000) {
-        transition(State::ACTIVE, t.now_ms);
-    }
 }
 
 void App::handle_rezero(const Tick& t) {
@@ -780,7 +789,6 @@ void App::on_tick(const Tick& t) {
         case State::ZERO_CAL:      handle_zero_cal(t); break;
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
-        case State::CAL_RESULT:    handle_cal_result(t); break;
         case State::ACTIVE:        handle_active(t); break;
         case State::REZERO:        handle_rezero(t); break;
         case State::VERIFY:        handle_verify(t); break;

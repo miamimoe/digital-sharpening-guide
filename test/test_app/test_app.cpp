@@ -42,11 +42,14 @@ static void drive_moving(App& a, uint32_t& t, uint32_t dur_ms) {
     }
 }
 
-// After a successful raise the session stops on CAL_RESULT. Tests that
-// just want ACTIVE tap through AXIS OK.
-static void skip_learn_to_active(App& a, uint32_t& t, Vec3 pose) {
-    if (a.current() == State::CAL_RESULT) {
-        advance(a, t, 100, InputEvent::A_SHORT, pose);
+// Drive still ticks until `want` (or the budget runs out). Used after the
+// raise capture so we stop on the completing ZERO_CAL tick, not 1.6 s later.
+static void drive_until(App& a, uint32_t& t, Vec3 accel, State want, uint32_t budget_ms = 2000) {
+    uint32_t end = t + budget_ms;
+    while (t < end && a.current() != want) {
+        t += 10;
+        App::Tick tick{t, InputEvent::NONE, accel, {0.0f, 0.0f, 0.0f}, FaultCode::NONE};
+        a.on_tick(tick);
     }
 }
 
@@ -55,8 +58,7 @@ static void zero_cal_flat_raise(App& a, uint32_t& t, Vec3 flat_pose, Vec3 raise_
     advance(a, t, 100, InputEvent::A_SHORT, flat_pose);   // -> CAPTURE_FLAT
     drive_still(a, t, flat_pose);                          // -> PROMPT_RAISE
     advance(a, t, 100, InputEvent::A_SHORT, raise_pose);   // -> CAPTURE_RAISE
-    drive_still(a, t, raise_pose);                         // -> CAL_RESULT
-    skip_learn_to_active(a, t, raise_pose);
+    drive_until(a, t, raise_pose, State::ACTIVE);          // first ACTIVE tick
 }
 
 void setUp(void) {
@@ -592,10 +594,9 @@ void test_zero_cal_flat_raise_flow_advances_to_active(void) {
     Vec3 raise = {0.0f, 0.2924f, -0.9563f};   // 17 deg about edge (body +x)
     advance(a, t, 100, InputEvent::A_SHORT, raise);
     drive_still(a, t, raise);
-    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
-    TEST_ASSERT_TRUE(a.cal_raise_deg() >= 8.0f);
-    skip_learn_to_active(a, t, raise);
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_TRUE(a.cal_raise_deg() >= 8.0f);
+    TEST_ASSERT_FLOAT_WITHIN(2.0f, 17.0f, a.live_bevel());
 
     Vec3 gf = a.g_flat();
     TEST_ASSERT_FLOAT_WITHIN(0.02f,  0.0f, gf.x);
@@ -840,20 +841,31 @@ void test_beep_fires_on_green_to_nongreen_edge(void) {
     TEST_ASSERT_EQUAL_INT(1, feedback::test_beep_out_count());
 }
 
-void test_cal_result_flush_does_not_mark_session(void) {
+void test_zero_cal_starts_active_on_the_raised_angle(void) {
     App a;
-    uint32_t t = 0;
     a.begin(false);
+    uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);
     advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
-    drive_still(a, t, {0.0f, 0.0f, -1.0f});
-    advance(a, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
-    drive_still(a, t, (Vec3){0.0f, 0.2924f, -0.9563f});
-    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
-    a.flush_session_for_sleep();
-    TEST_ASSERT_FALSE(session::has_session());
+    zero_cal_flat_raise(a, t, {0.0f, 0.0f, -1.0f}, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    // Must already read ~17 — not crawl down from a stale 40–90 deg start.
+    TEST_ASSERT_FLOAT_WITHIN(2.0f, 17.0f, a.live_bevel());
+}
+
+void test_first_active_tick_ignores_a_moving_nudge(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    zero_cal_flat_raise(a, t, {0.0f, 0.0f, -1.0f}, g_now_at_target_17);
+    // A 2 g swipe on the first ACTIVE frame must not overwrite the raise pose.
+    advance(a, t, 20, InputEvent::NONE, {2.0f, 0.0f, 0.0f}, {50.0f, 0.0f, 0.0f});
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_FLOAT_WITHIN(2.0f, 17.0f, a.live_bevel());
 }
 
 void test_tiny_raise_stays_in_zero_cal(void) {
@@ -875,19 +887,14 @@ void test_tiny_raise_stays_in_zero_cal(void) {
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_RAISE, (int)a.zero_cal_substate());
 }
 
-void test_cal_result_goes_to_active(void) {
+void test_successful_raise_goes_to_active(void) {
     App a;
     uint32_t t = 0;
     a.begin(false);
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);
     advance(a, t, 100, InputEvent::A_SHORT);
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
-    drive_still(a, t, {0.0f, 0.0f, -1.0f});
-    advance(a, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
-    drive_still(a, t, (Vec3){0.0f, 0.2924f, -0.9563f});
-    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
-    advance(a, t, 100, InputEvent::A_SHORT);
+    zero_cal_flat_raise(a, t, {0.0f, 0.0f, -1.0f}, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
@@ -983,9 +990,10 @@ int main(int, char**) {
     RUN_TEST(test_no_beep_on_first_active_tick);
     RUN_TEST(test_beep_fires_on_green_to_nongreen_edge);
     RUN_TEST(test_flush_for_sleep_persists_tick_counters);
-    RUN_TEST(test_cal_result_flush_does_not_mark_session);
+    RUN_TEST(test_zero_cal_starts_active_on_the_raised_angle);
+    RUN_TEST(test_first_active_tick_ignores_a_moving_nudge);
     RUN_TEST(test_tiny_raise_stays_in_zero_cal);
-    RUN_TEST(test_cal_result_goes_to_active);
+    RUN_TEST(test_successful_raise_goes_to_active);
     RUN_TEST(test_peel_motion_does_not_flip_side);
     RUN_TEST(test_b_short_enters_rezero);
     return UNITY_END();
