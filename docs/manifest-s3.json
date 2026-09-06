@@ -1,6 +1,6 @@
 {
   "name": "Digital Sharpening Guide (M5StickS3)",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "funding_url": "https://github.com/miamimoe/digital-sharpening-guide",
   "new_install_prompt_erase": true,
   "builds": [
@@ -8,7 +8,7 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "firmware/sharpening-guide-s3-v1.1.0.bin",
+          "path": "firmware/sharpening-guide-s3-v1.1.1.bin",
           "offset": 0
         }
       ]

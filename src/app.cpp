@@ -182,19 +182,11 @@ void App::transition(State to, uint32_t now_ms) {
             ui::clear();
             zc_rendered_ = ZeroCalSubstate::DONE;
             zc_raise_retry_ = false;
-            // Remount mid-session must not wipe stroke counts.
-            zero_cal_keep_stats_ = (from == State::ACTIVE || from == State::SIDE_CONFIRM);
+            // Re-entering ZERO_CAL mid-session must not wipe stroke counts.
+            zero_cal_keep_stats_ = (from == State::ACTIVE);
             break;
         case State::CAL_RESULT:
             ui::draw_cal_result(cal_raise_deg_, cal_skew_deg_);
-            break;
-        case State::STROKE_LEARN:
-            learner_.reset();
-            stroke_fsm_.reset_thresholds();
-            ui::clear();
-            break;
-        case State::SIDE_CONFIRM:
-            ui::draw_side_confirm(side_fsm_.current_side());
             break;
         case State::REZERO:
             // Repaint from scratch: clearing also invalidates the zero-cal
@@ -209,11 +201,6 @@ void App::transition(State to, uint32_t now_ms) {
             // Do NOT reset side_fsm_ here: the resume path (RESUME_PROMPT->ACTIVE)
             // must keep the side restored in begin(). Fresh sessions reset the
             // side explicitly in handle_zero_cal before transitioning here.
-            if (from == State::SIDE_CONFIRM || from == State::STROKE_LEARN) {
-                peel_fsm_.suppress(now_ms);
-            } else {
-                peel_fsm_.reset();
-            }
             save_session_();
             break;
         }
@@ -273,11 +260,10 @@ void App::flush_session_for_sleep() {
     // REZERO is still a live session (the zero refresh happens in place), so it
     // flushes too. SUMMARY/SLEEP deliberately do not: those sessions are over
     // and their RTC state was already cleared.
-    // Only a live session is resumable. CAL_RESULT / STROKE_LEARN have a
-    // zero but no learned thresholds yet — saving here would wake into
-    // ACTIVE with factory stroke peaks and skip the learn screen.
-    if (state_ == State::ACTIVE || state_ == State::REZERO
-        || state_ == State::SIDE_CONFIRM) {
+    // Only a live session is resumable. CAL_RESULT has a zero but the
+    // session has not started yet — saving here would wake into ACTIVE
+    // and skip the AXIS OK screen.
+    if (state_ == State::ACTIVE || state_ == State::REZERO) {
         save_session_();
     }
 }
@@ -393,7 +379,6 @@ void App::handle_zero_cal(const Tick& t) {
                     green_ticks_ = active_ticks_ = 0;
                     side_fsm_.reset();
                     stroke_fsm_.reset();
-                    stroke_fsm_.reset_thresholds();
                 }
                 transition(State::CAL_RESULT, t.now_ms);
             }
@@ -543,7 +528,7 @@ void App::handle_active(const Tick& t) {
     ++active_ticks_;
     if (col == ColorState::GREEN) ++green_ticks_;
 
-    if (lat >= stroke_fsm_.peak_low()) last_activity_ms_ = t.now_ms;
+    if (lat >= StrokeFSM::PEAK_LOW_G) last_activity_ms_ = t.now_ms;
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -555,39 +540,20 @@ void App::handle_active(const Tick& t) {
         save_session_();
     }
 
-    const float a_mag = std::sqrt(t.accel_g.x*t.accel_g.x
-                                + t.accel_g.y*t.accel_g.y
-                                + t.accel_g.z*t.accel_g.z);
-    const float g_mag = std::sqrt(t.gyro_dps.x*t.gyro_dps.x
-                                + t.gyro_dps.y*t.gyro_dps.y
-                                + t.gyro_dps.z*t.gyro_dps.z);
-    peel_fsm_.update(t.now_ms, a_mag, g_mag);
-    if (peel_fsm_.consume_settled()) {
-        last_activity_ms_ = t.now_ms;
-        if (remount_suspected(g_flat_, edge_axis_, filter_.gravity())) {
-            zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
-            transition(State::ZERO_CAL, t.now_ms);
-            return;
-        }
-        transition(State::SIDE_CONFIRM, t.now_ms);
-        return;
-    }
-
     if (t.input == InputEvent::A_LONG) {
         transition(State::SUMMARY, t.now_ms);
         return;
     }
     if (t.input == InputEvent::A_SHORT) {
-        transition(State::REZERO, t.now_ms);
-        return;
-    }
-    if (t.input == InputEvent::B_SHORT) {
         side_fsm_.manual_toggle(t.now_ms);
         side_fsm_.consume_switch();
         stroke_fsm_.reset();
-        peel_fsm_.suppress(t.now_ms);
         last_activity_ms_ = t.now_ms;
         save_session_();
+    }
+    if (t.input == InputEvent::B_SHORT) {
+        transition(State::REZERO, t.now_ms);
+        return;
     }
     if (t.input == InputEvent::B_LONG) {
         buzzer_on_ = !buzzer_on_;
@@ -620,56 +586,8 @@ void App::handle_active(const Tick& t) {
 void App::handle_cal_result(const Tick& t) {
     if (t.input == InputEvent::A_SHORT || t.input == InputEvent::B_SHORT
         || t.now_ms - state_entered_ms_ >= 2000) {
-        transition(State::STROKE_LEARN, t.now_ms);
-    }
-}
-
-void App::handle_stroke_learn(const Tick& t) {
-    if (t.input == InputEvent::A_LONG) {
-        transition(State::SET_TARGET, t.now_ms);
-        return;
-    }
-    float bevel = 0.0f, lat = 0.0f;
-    ColorState col = ColorState::GREEN;
-    sample_live_(t, bevel, lat, col);
-    color_valid_ = true;
-    prev_color_  = col;
-    learner_.update(t.now_ms, lat);
-    if (lat >= StrokeLearner::DETECT_LOW_G) last_activity_ms_ = t.now_ms;
-
-    if (t.input == InputEvent::A_SHORT) {
-        learner_.commit(stroke_fsm_);
         transition(State::ACTIVE, t.now_ms);
-        return;
     }
-    if (t.input == InputEvent::B_SHORT) {
-        stroke_fsm_.reset_thresholds();
-        transition(State::ACTIVE, t.now_ms);
-        return;
-    }
-    feedback::set_color(col);
-    ui::draw_stroke_learn(learner_.peaks(), col, bevel);
-}
-
-void App::handle_side_confirm(const Tick& t) {
-    float bevel = 0.0f, lat = 0.0f;
-    ColorState col = ColorState::GREEN;
-    sample_live_(t, bevel, lat, col);
-    if (lat >= stroke_fsm_.peak_low()) last_activity_ms_ = t.now_ms;
-
-    if (t.input == InputEvent::A_SHORT) {
-        side_fsm_.manual_toggle(t.now_ms);
-        side_fsm_.consume_switch();
-        stroke_fsm_.reset();
-        save_session_();
-        transition(State::ACTIVE, t.now_ms);
-        return;
-    }
-    if (t.input == InputEvent::B_SHORT || t.now_ms - state_entered_ms_ >= 3000) {
-        transition(State::ACTIVE, t.now_ms);
-        return;
-    }
-    feedback::set_color(col);
 }
 
 void App::handle_rezero(const Tick& t) {
@@ -863,9 +781,7 @@ void App::on_tick(const Tick& t) {
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
         case State::CAL_RESULT:    handle_cal_result(t); break;
-        case State::STROKE_LEARN:  handle_stroke_learn(t); break;
         case State::ACTIVE:        handle_active(t); break;
-        case State::SIDE_CONFIRM:  handle_side_confirm(t); break;
         case State::REZERO:        handle_rezero(t); break;
         case State::VERIFY:        handle_verify(t); break;
         case State::SUMMARY:       handle_summary(t); break;

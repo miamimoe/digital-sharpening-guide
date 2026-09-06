@@ -54,8 +54,6 @@ namespace {
     int  s_last_zc_tenths       = -1;
     bool s_last_zc_tenths_valid = false;
     bool s_last_zc_moving        = false;
-    int         s_last_learn_peaks = -1;
-    ColorState  s_last_learn_color = ColorState::GREEN;
     int         s_last_error_px    = -999;
 
     uint16_t color_for(ColorState c) {
@@ -79,16 +77,6 @@ namespace {
         M5.Display.print(s);
     }
 
-    // Center a string horizontally within the column [x0, x0 + region_w).
-    void draw_centered_in(const char* s, int x0, int region_w, int y, int size,
-                          uint16_t fg, uint16_t bg) {
-        M5.Display.setTextColor(fg, bg);
-        M5.Display.setTextSize(size);
-        int x = x0 + (region_w - text_w(s, size)) / 2;
-        if (x < x0) x = x0;
-        M5.Display.setCursor(x, y);
-        M5.Display.print(s);
-    }
 }
 
 namespace ui {
@@ -106,8 +94,6 @@ void clear() {
     s_last_zc_tenths_valid = false;
     s_shown_valid = false;
     s_last_verify_valid = false;
-    s_last_learn_peaks = -1;
-    s_last_learn_color = ColorState::GREEN;
     s_last_error_px = -999;
 }
 
@@ -115,7 +101,7 @@ void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v1.1.0", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.1.1", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -150,19 +136,16 @@ void draw_set_tolerance(Tolerance tol, bool steady) {
 }
 
 void draw_active(const ActiveView& v) {
-    // Two equal columns: ANGLE (left) | STROKE (right). Both rendered at the same
-    // large text size so neither reads as secondary.
-    constexpr int DIV_X   = 120;          // column divider / right-column origin
-    constexpr int LABEL_Y = 24;           // small column headers
-    constexpr int NUM_Y   = 52;           // big numbers (size 5 -> 40 px tall)
-    constexpr int SUB_Y   = 102;          // other-side stroke count, under STROKE
-    constexpr int NUM_SZ  = 5;
+    // Angle is the coach. Stroke count is a small hint — the detector is a
+    // factory guess and is not accurate enough to share the screen.
+    constexpr int NUM_Y  = 36;
+    constexpr int NUM_SZ = 5;
+    constexpr int SUB_Y  = 118;
     const uint16_t bg = color_for(v.color);
 
     bool color_changed = !s_last_valid || s_last.color != v.color;
     if (color_changed) {
         wipe(bg);
-        // Legend strip across the top.
         M5.Display.fillRect(8,   4, 12, 12, COL_BLUE);
         M5.Display.fillRect(78,  4, 12, 12, COL_GREEN);
         M5.Display.fillRect(146, 4, 12, 12, COL_RED);
@@ -171,42 +154,18 @@ void draw_active(const ActiveView& v) {
         M5.Display.setCursor(24,  6); M5.Display.print("LOW");
         M5.Display.setCursor(94,  6); M5.Display.print("OK");
         M5.Display.setCursor(162, 6); M5.Display.print("HIGH");
-        // Column divider + static headers.
-        M5.Display.fillRect(DIV_X - 1, 22, 2, SCR_H - 22, COL_WHITE);
-        draw_centered_in("ANGLE",  0,     DIV_X,         LABEL_Y, 2, COL_WHITE, bg);
-        draw_centered_in("STROKE", DIV_X, SCR_W - DIV_X, LABEL_Y, 2, COL_WHITE, bg);
     }
 
     bool counts_changed =
         s_last.current_side != v.current_side ||
         s_last.strokes_A != v.strokes_A ||
         s_last.strokes_B != v.strokes_B;
-    // The buzzer overlay sits over the lower band; when it clears (or a color
-    // change wiped the screen) we must repaint the numbers it covered.
     bool flash_ended = s_last_valid && s_last.buzzer_flash && !v.buzzer_flash;
-    // The number repaints below do not cover the whole overlay rect (left-column
-    // rows 96-126 under x<120 would stay black), so erase it first. A color
-    // change already wiped the full screen.
     if (flash_ended && !color_changed) {
-        M5.Display.fillRect(30, 96, 180, 30, bg);
+        M5.Display.fillRect(20, 92, 200, 36, bg);
     }
 
-    // Right column: current-side stroke count (big) + other-side count (small).
-    if (color_changed || counts_changed || flash_ended) {
-        uint32_t big = (v.current_side == Side::A) ? v.strokes_A : v.strokes_B;
-        uint32_t sm  = (v.current_side == Side::A) ? v.strokes_B : v.strokes_A;
-        char other_label = (v.current_side == Side::A) ? 'B' : 'A';
-        char buf[12];
-        std::snprintf(buf, sizeof buf, "%u", (unsigned)big);
-        M5.Display.fillRect(DIV_X + 1, NUM_Y, SCR_W - DIV_X - 1, 8 * NUM_SZ, bg);
-        draw_centered_in(buf, DIV_X, SCR_W - DIV_X, NUM_Y, NUM_SZ, COL_WHITE, bg);
-        char sbuf[16];
-        std::snprintf(sbuf, sizeof sbuf, "%c:%u", other_label, (unsigned)sm);
-        M5.Display.fillRect(DIV_X + 1, SUB_Y, SCR_W - DIV_X - 1, 16, bg);
-        draw_centered_in(sbuf, DIV_X, SCR_W - DIV_X, SUB_Y, 2, COL_WHITE, bg);
-    }
-
-    // Left column: live angle as a whole number. Rounding alone is not enough —
+    // Live angle as a whole number. Rounding alone is not enough —
     // a value hovering near x.5 flips between two integers forever. In steady mode
     // the shown degree only moves once the live angle clears it by more than half
     // a degree plus a margin, which leaves a ~0.3 deg deadband and stops the
@@ -224,18 +183,17 @@ void draw_active(const ActiveView& v) {
     std::snprintf(abuf, sizeof abuf, "%ld", std::lround(s_shown_deg));
     if (color_changed || flash_ended
         || !s_last_angle_valid || std::strcmp(abuf, s_last_angle) != 0) {
-        M5.Display.fillRect(0, NUM_Y, DIV_X - 1, 8 * NUM_SZ, bg);
-        draw_centered_in(abuf, 0, DIV_X, NUM_Y, NUM_SZ, COL_WHITE, bg);
+        M5.Display.fillRect(0, NUM_Y, SCR_W, 8 * NUM_SZ, bg);
+        draw_centered(abuf, NUM_Y, NUM_SZ, COL_WHITE, bg);
         std::strncpy(s_last_angle, abuf, sizeof s_last_angle - 1);
         s_last_angle[sizeof s_last_angle - 1] = '\0';
         s_last_angle_valid = true;
     }
 
-    // Signed error tick under ANGLE: left = too low, right = too high. Scaled
-    // so +-1.5 * tolerance fills the column. Lets you correct before the color
-    // band flips.
+    // Signed error tick: left = too low, right = too high. Scaled so
+    // +-1.5 * tolerance fills the bar.
     {
-        constexpr int BAR_Y = 122, BAR_X = 8, BAR_W = 104, BAR_H = 6;
+        constexpr int BAR_Y = 88, BAR_X = 40, BAR_W = 160, BAR_H = 6;
         float span = v.tol_deg * 1.5f;
         if (span < 1.0f) span = 1.0f;
         float n = v.error_deg / span;
@@ -253,9 +211,15 @@ void draw_active(const ActiveView& v) {
         }
     }
 
-    // Draw the buzzer-flash overlay only when it newly appears or the area under
-    // it was just repainted (color change wiped the screen; a counts repaint
-    // covers the right-column sub-label band the overlay overlaps).
+    if (color_changed || counts_changed || flash_ended) {
+        uint32_t cur = (v.current_side == Side::A) ? v.strokes_A : v.strokes_B;
+        char side = (v.current_side == Side::A) ? 'A' : 'B';
+        char sbuf[16];
+        std::snprintf(sbuf, sizeof sbuf, "%c %u", side, (unsigned)cur);
+        M5.Display.fillRect(0, SUB_Y, SCR_W, 16, bg);
+        draw_centered(sbuf, SUB_Y, 1, COL_WHITE, bg);
+    }
+
     if (v.buzzer_flash && (!s_last_valid || !s_last.buzzer_flash
                            || color_changed || counts_changed)) {
         M5.Display.fillRect(30, 96, 180, 30, COL_BLACK);
@@ -421,33 +385,6 @@ void draw_cal_result(float raise_deg, float skew_deg) {
     draw_centered("A:Go", 118, 1, COL_WHITE, COL_BLACK);
 }
 
-void draw_stroke_learn(int peaks, ColorState color, float /*angle_deg*/) {
-    if (peaks == s_last_learn_peaks && s_last_learn_color == color) return;
-    const uint16_t bg = color_for(color);
-    wipe(bg);
-    draw_centered("LEARN STROKE", 8, 2, COL_WHITE, bg);
-    char buf[16];
-    std::snprintf(buf, sizeof buf, "%d / 10", peaks);
-    draw_centered(buf, 48, 4, COL_WHITE, bg);
-    draw_centered("Do 10, tap A", 96, 1, COL_WHITE, bg);
-    draw_centered("A:Done   B:Skip", 116, 1, COL_WHITE, bg);
-    s_last_learn_peaks = peaks;
-    s_last_learn_color = color;
-    // Leave s_last_valid false so the first ACTIVE frame after learn
-    // repaints its divider and headers instead of inheriting this color.
-    s_last_valid = false;
-}
-
-void draw_side_confirm(Side current) {
-    wipe(COL_BLACK);
-    draw_centered("FLIPPED?", 12, 3, COL_WHITE, COL_BLACK);
-    char buf[20];
-    std::snprintf(buf, sizeof buf, "now side %c", current == Side::A ? 'A' : 'B');
-    draw_centered(buf, 56, 2, COL_WHITE, COL_BLACK);
-    draw_centered("A:Other   B:Same", 100, 1, COL_WHITE, COL_BLACK);
-    draw_centered("timeout keeps this side", 118, 1, COL_WHITE, COL_BLACK);
-}
-
 void draw_zero_cal_progress(int remaining_ms, bool moving) {
     int tenths = remaining_ms / 100;
     if (s_last_zc_tenths_valid && tenths == s_last_zc_tenths && moving == s_last_zc_moving) return;
@@ -535,8 +472,6 @@ namespace ui {
     void draw_zero_cal_prompt(int, bool) {}
     void draw_zero_cal_progress(int, bool) {}
     void draw_cal_result(float, float) {}
-    void draw_stroke_learn(int, ColorState, float) {}
-    void draw_side_confirm(Side) {}
     void draw_battery(int, bool) {}
     void set_backlight(uint8_t) {}
 }

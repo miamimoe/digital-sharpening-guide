@@ -36,8 +36,6 @@ namespace ui {
     // step: 1 (side A) or 2 (side B). retry: true if last attempt failed stillness gate.
     void draw_zero_cal_prompt(int step, bool raise_more);
     void draw_cal_result(float raise_deg, float skew_deg);
-    void draw_stroke_learn(int peaks, ColorState color, float angle_deg);
-    void draw_side_confirm(Side current);
     // remaining_ms: time left in current capture window (warmup + averaging combined).
     // moving: device is not still this tick (gate failing) — show a motion warning
     // so a frozen-looking countdown is understood as "you're moving it".

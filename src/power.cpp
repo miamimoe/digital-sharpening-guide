@@ -17,8 +17,6 @@ IdleConfig config_for(State s) {
             return {0, 0};
         case State::ZERO_CAL:       return { 60000, 120000};
         case State::CAL_RESULT:     return { 60000,  90000};
-        case State::STROKE_LEARN:   return {180000, 300000};
-        case State::SIDE_CONFIRM:   return { 60000, 120000};
         // An in-progress REZERO capture never sleeps: app.cpp refreshes
         // last_activity_ms_ while the capture FSM is progressing or the user is
         // handling the device, so only an abandoned static screen idles out.

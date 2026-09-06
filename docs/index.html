@@ -207,7 +207,7 @@
 <body>
   <div class="wrap">
     <header>
-      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.1.0</span></p>
+      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.1.1</span></p>
       <h1>Digital Sharpening Guide</h1>
       <p class="sub">A magnet-backed angle guide for your knives. Stick it to the blade, set a target angle, and the screen holds green while you hold the bevel. Flash it to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page — no toolchain, just a USB-C cable.</p>
     </header>
@@ -281,7 +281,7 @@
     <div class="step">
       <h2><span class="n">03</span> After flashing</h2>
       <ol>
-        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.1.0</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
+        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.1.1</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
         <li>Stick it onto the knife's flat — the magnet is in the back — and follow the on-screen calibration.</li>
         <li>The full walkthrough and control reference are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
       </ol>
@@ -289,15 +289,19 @@
 
     <div class="step log">
       <h2><span class="n">&#9670;</span> What's new</h2>
-      <h3>v1.1.0</h3>
+      <h3>v1.1.1</h3>
       <ul>
-        <li><strong>Learn your stroke.</strong> After zero-cal, do about ten passes and tap <strong>A</strong>. The counter locks to your motion. Tap <strong>B</strong> to skip.</li>
-        <li><strong>Peel asks SAME / OTHER.</strong> Lift the knife and set it back down: <strong>A</strong> switches side, <strong>B</strong> (or three seconds) keeps this one. A normal stroke will not trigger it.</li>
-        <li><strong>Faster green when you correct.</strong> Smoothing shortens while you rotate about the edge and stays long while you stroke. A tick under ANGLE shows which way you are off before the colour flips.</li>
-        <li><strong>Calibration fails out loud.</strong> A raise under 8&#176; is refused. A good raise shows <strong>AXIS OK</strong>. Remounting the stick mid-session forces a full re-cal.</li>
+        <li><strong>Front button flips the side.</strong> Short-press <strong>A</strong> (the big button next to the screen) to switch A &#8596; B. The peel / <code>FLIPPED?</code> prompt is gone.</li>
+        <li><strong>Side button re-zeros.</strong> Short-press <strong>B</strong> to recapture the flat reference in place. Hold <strong>A</strong> to end the session.</li>
+        <li><strong>Stroke count is small.</strong> Factory peak detection is back. The number sits at the bottom of the main screen as a hint, not a score. The learn-your-stroke screen is gone.</li>
+        <li><strong>Loud calibration stays.</strong> A raise under 8&#176; is still refused. A good raise still shows <strong>AXIS OK</strong>. Adaptive smoothing and the error tick stay too.</li>
       </ul>
       <details>
         <summary>Earlier releases</summary>
+        <h3>v1.1.0</h3>
+        <ul>
+          <li>Tried automatic side-detect after a peel and a learn-your-stroke screen. Both missed on a real knife and were pulled in v1.1.1. Loud calibration and the error tick from this release stayed.</li>
+        </ul>
         <h3>v1.0.2</h3>
         <ul>
           <li>Re-zero <strong>B</strong> now force-captures as the screen says. Abandoned calibration times out. No stray beep at session start. Sleep keeps session stats. No duplicate history after sleeping on the summary.</li>

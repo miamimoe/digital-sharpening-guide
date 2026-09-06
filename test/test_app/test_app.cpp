@@ -42,14 +42,11 @@ static void drive_moving(App& a, uint32_t& t, uint32_t dur_ms) {
     }
 }
 
-// After a successful raise the session now stops on CAL_RESULT, then
-// STROKE_LEARN. Tests that just want ACTIVE skip the learn with B.
+// After a successful raise the session stops on CAL_RESULT. Tests that
+// just want ACTIVE tap through AXIS OK.
 static void skip_learn_to_active(App& a, uint32_t& t, Vec3 pose) {
     if (a.current() == State::CAL_RESULT) {
         advance(a, t, 100, InputEvent::A_SHORT, pose);
-    }
-    if (a.current() == State::STROKE_LEARN) {
-        advance(a, t, 100, InputEvent::B_SHORT, pose);
     }
 }
 
@@ -681,11 +678,11 @@ void test_e2e_manual_side_switch_sticks(void) {
     uint32_t t = 0;
     reach_active(a, t);
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
-    advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
     advance(a, t, 3000, InputEvent::NONE, g_now_at_target_17);   // must NOT auto-revert
     TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
-    advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
+    advance(a, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
 
@@ -693,7 +690,7 @@ void test_rezero_updates_flat_reference(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);                       // g_flat = {0,0,-1}
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.0f, -1.0f});
     TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
 
     Vec3 new_flat = {0.0f, 0.5f, -0.8660254f};   // re-capture at a new still pose
@@ -709,7 +706,7 @@ void test_rezero_abort_leaves_flat_unchanged(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.0f, -1.0f});
     TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
     advance(a, t, 300, InputEvent::NONE,   {0.0f, 0.5f, -0.8660254f}, {0,0,0});
     advance(a, t, 100, InputEvent::A_LONG, {0.0f, 0.5f, -0.8660254f}, {0,0,0});  // abort
@@ -725,7 +722,7 @@ void test_rezero_b_force_captures(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);                       // g_flat = {0,0,-1}
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.0f, -1.0f});
     TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
     // Present a new pose (not held long enough for the gate to complete),
     // then tap B: the normalized current accel becomes the new flat reference.
@@ -792,7 +789,7 @@ void test_rezero_capture_times_out_to_active(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);                       // g_flat = {0,0,-1}
-    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::B_SHORT, {0.0f, 0.0f, -1.0f});
     TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
     drive_moving(a, t, 61000);                 // abandoned re-zero
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
@@ -843,7 +840,7 @@ void test_beep_fires_on_green_to_nongreen_edge(void) {
     TEST_ASSERT_EQUAL_INT(1, feedback::test_beep_out_count());
 }
 
-void test_stroke_learn_flush_does_not_mark_session(void) {
+void test_cal_result_flush_does_not_mark_session(void) {
     App a;
     uint32_t t = 0;
     a.begin(false);
@@ -855,10 +852,6 @@ void test_stroke_learn_flush_does_not_mark_session(void) {
     advance(a, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
     drive_still(a, t, (Vec3){0.0f, 0.2924f, -0.9563f});
     TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
-    a.flush_session_for_sleep();
-    TEST_ASSERT_FALSE(session::has_session());
-    advance(a, t, 100, InputEvent::A_SHORT);
-    TEST_ASSERT_EQUAL_INT((int)State::STROKE_LEARN, (int)a.current());
     a.flush_session_for_sleep();
     TEST_ASSERT_FALSE(session::has_session());
 }
@@ -882,67 +875,40 @@ void test_tiny_raise_stays_in_zero_cal(void) {
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_RAISE, (int)a.zero_cal_substate());
 }
 
-void test_stroke_learn_a_locks_thresholds(void) {
-    App b;
+void test_cal_result_goes_to_active(void) {
+    App a;
     uint32_t t = 0;
-    b.begin(false);
-    advance(b, t, 2100);
-    advance(b, t, 100, InputEvent::A_SHORT);
-    advance(b, t, 100, InputEvent::A_SHORT);
-    advance(b, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
-    drive_still(b, t, {0.0f, 0.0f, -1.0f});
-    advance(b, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
-    drive_still(b, t, (Vec3){0.0f, 0.2924f, -0.9563f});
-    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)b.current());
-    advance(b, t, 100, InputEvent::A_SHORT);
-    TEST_ASSERT_EQUAL_INT((int)State::STROKE_LEARN, (int)b.current());
-    // Five lateral peaks at 0.30 g while on-angle.
-    for (int i = 0; i < 5; i++) {
-        Vec3 peak = {0.30f, 0.2924f, -0.9563f};
-        advance(b, t, 80, InputEvent::NONE, peak);
-        advance(b, t, 400, InputEvent::NONE, g_now_at_target_17);
-    }
-    TEST_ASSERT_TRUE(b.learn_peaks() >= 3);
-    advance(b, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
-    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)b.current());
-    TEST_ASSERT_TRUE(b.stroke_high_g() < StrokeFSM::PEAK_HIGH_G + 0.20f);
-    TEST_ASSERT_TRUE(b.stroke_high_g() > 0.09f);
+    a.begin(false);
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    drive_still(a, t, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
+    drive_still(a, t, (Vec3){0.0f, 0.2924f, -0.9563f});
+    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
+    advance(a, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
 
-void test_peel_asks_same_or_other(void) {
+void test_peel_motion_does_not_flip_side(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);
     TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
     advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
     advance(a, t, 400, InputEvent::NONE, g_now_at_target_17, {0,0,0});
-    TEST_ASSERT_EQUAL_INT((int)State::SIDE_CONFIRM, (int)a.current());
-    advance(a, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
-    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
 }
 
-void test_peel_b_keeps_side(void) {
+void test_b_short_enters_rezero(void) {
     App a;
     uint32_t t = 0;
     reach_active(a, t);
-    advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
-    advance(a, t, 400, InputEvent::NONE, g_now_at_target_17, {0,0,0});
-    TEST_ASSERT_EQUAL_INT((int)State::SIDE_CONFIRM, (int)a.current());
     advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
-    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
-    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
-}
-
-void test_remount_after_peel_forces_zero_cal(void) {
-    App a;
-    uint32_t t = 0;
-    reach_active(a, t);
-    // Airborne, then settle in a pose that walks the hinge component.
-    const Vec3 remounted = {0.50f, 0.0f, -0.8660254f};
-    advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
-    advance(a, t, 400, InputEvent::NONE, remounted, {0,0,0});
-    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)State::REZERO, (int)a.current());
 }
 
 void test_flush_for_sleep_persists_tick_counters(void) {
@@ -1017,11 +983,10 @@ int main(int, char**) {
     RUN_TEST(test_no_beep_on_first_active_tick);
     RUN_TEST(test_beep_fires_on_green_to_nongreen_edge);
     RUN_TEST(test_flush_for_sleep_persists_tick_counters);
-    RUN_TEST(test_stroke_learn_flush_does_not_mark_session);
+    RUN_TEST(test_cal_result_flush_does_not_mark_session);
     RUN_TEST(test_tiny_raise_stays_in_zero_cal);
-    RUN_TEST(test_stroke_learn_a_locks_thresholds);
-    RUN_TEST(test_peel_asks_same_or_other);
-    RUN_TEST(test_peel_b_keeps_side);
-    RUN_TEST(test_remount_after_peel_forces_zero_cal);
+    RUN_TEST(test_cal_result_goes_to_active);
+    RUN_TEST(test_peel_motion_does_not_flip_side);
+    RUN_TEST(test_b_short_enters_rezero);
     return UNITY_END();
 }

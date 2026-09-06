@@ -83,42 +83,6 @@ void test_reset_zeros(void) {
     TEST_ASSERT_EQUAL_UINT32(0, fsm.stroke_count());
 }
 
-void test_reset_keeps_learned_thresholds(void) {
-    StrokeFSM fsm;
-    fsm.set_thresholds(0.30f, 0.16f);
-    fsm.reset();
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.30f, fsm.peak_high());
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.16f, fsm.peak_low());
-}
-
-void test_learner_records_peaks_and_commits(void) {
-    StrokeLearner learn;
-    StrokeFSM fsm;
-    uint32_t t = 0;
-    for (int i = 0; i < 5; i++) {
-        uint32_t end = t + 80;
-        while (t < end) { t += 10; learn.update(t, 0.30f); }
-        end = t + 400;
-        while (t < end) { t += 10; learn.update(t, 0.0f); }
-    }
-    TEST_ASSERT_EQUAL_INT(5, learn.peaks());
-    TEST_ASSERT_TRUE(learn.commit(fsm));
-    TEST_ASSERT_FLOAT_WITHIN(0.02f, 0.21f, fsm.peak_high());   // 0.30 * 0.70
-}
-
-void test_learner_few_peaks_keeps_factory(void) {
-    StrokeLearner learn;
-    StrokeFSM fsm;
-    uint32_t t = 0;
-    uint32_t end = t + 80;
-    while (t < end) { t += 10; learn.update(t, 0.30f); }
-    end = t + 400;
-    while (t < end) { t += 10; learn.update(t, 0.0f); }
-    TEST_ASSERT_EQUAL_INT(1, learn.peaks());
-    TEST_ASSERT_FALSE(learn.commit(fsm));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, StrokeFSM::PEAK_HIGH_G, fsm.peak_high());
-}
-
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_starts_at_zero);
@@ -129,8 +93,5 @@ int main(int, char**) {
     RUN_TEST(test_sustained_high_without_dip_counts_once);
     RUN_TEST(test_grace_allows_brief_off_angle_mid_pass);
     RUN_TEST(test_reset_zeros);
-    RUN_TEST(test_reset_keeps_learned_thresholds);
-    RUN_TEST(test_learner_records_peaks_and_commits);
-    RUN_TEST(test_learner_few_peaks_keeps_factory);
     return UNITY_END();
 }

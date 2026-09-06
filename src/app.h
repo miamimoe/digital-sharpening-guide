@@ -2,7 +2,6 @@
 #include "types.h"
 #include "stroke.h"
 #include "side.h"
-#include "peel.h"
 #include "filter.h"
 #include "zero_cal.h"
 
@@ -50,8 +49,6 @@ public:
     Vec3             edge_axis()         const { return edge_axis_; }
     float            cal_raise_deg()     const { return cal_raise_deg_; }
     float            cal_skew_deg()      const { return cal_skew_deg_; }
-    int              learn_peaks()       const { return learner_.peaks(); }
-    float            stroke_high_g()     const { return stroke_fsm_.peak_high(); }
 
 private:
     void transition(State to, uint32_t now_ms);
@@ -68,8 +65,6 @@ private:
     void handle_history         (const Tick& t);
     void handle_resume_prompt   (const Tick& t);
     void handle_cal_result      (const Tick& t);
-    void handle_stroke_learn    (const Tick& t);
-    void handle_side_confirm    (const Tick& t);
 
     void apply_adaptive_tau_(const Tick& t);
     void sample_live_(const Tick& t, float& bevel, float& lat, ColorState& col);
@@ -152,9 +147,7 @@ private:
 
     MahonyFilter filter_;
     StrokeFSM    stroke_fsm_;
-    StrokeLearner learner_;
     SideFSM      side_fsm_;
-    PeelFSM      peel_fsm_;
     FaultCode    fault_code_           = FaultCode::NONE;
 
     float        cal_raise_deg_        = 0.0f;
