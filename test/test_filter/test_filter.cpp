@@ -198,6 +198,19 @@ void test_accel_reference_tracks_raw_when_smoothing_is_off(void) {
     TEST_ASSERT_EQUAL_FLOAT(a.z, r.z);
 }
 
+void test_adjust_tau_keeps_low_pass_state(void) {
+    MahonyFilter f;
+    f.begin(50.0f, 0.8f, 0.02f);
+    f.set_accel_tau(mahony::ACCEL_LP_TAU_S);
+    f.update({0,0,0}, {0.0f, 0.0f, -1.0f});
+    f.update({0,0,0}, {0.4f, 0.0f, -1.0f});
+    Vec3 before = f.accel_reference();
+    f.adjust_accel_tau(mahony::ACCEL_LP_TAU_CORRECT_S);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, before.x, f.accel_reference().x);
+    f.set_accel_tau(mahony::ACCEL_LP_TAU_CORRECT_S);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, f.accel_reference().x);  // reset
+}
+
 void test_accel_reference_is_smoothed_when_smoothing_is_on(void) {
     // With smoothing on it must lag the raw sample, not echo it.
     MahonyFilter f;
@@ -245,5 +258,6 @@ int main(int, char**) {
     RUN_TEST(test_nudge_reseeds_the_smoothed_accel);
     RUN_TEST(test_accel_reference_tracks_raw_when_smoothing_is_off);
     RUN_TEST(test_accel_reference_is_smoothed_when_smoothing_is_on);
+    RUN_TEST(test_adjust_tau_keeps_low_pass_state);
     return UNITY_END();
 }

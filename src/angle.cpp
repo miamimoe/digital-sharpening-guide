@@ -81,3 +81,37 @@ float bevel_angle(Vec3 g_flat, Vec3 edge_axis, Vec3 g_now) {
     if (deg > 90.0f) deg = 180.0f - deg;
     return deg;
 }
+
+float raise_angle_deg(Vec3 g_flat, Vec3 g_raised) {
+    // Total tilt between the two captures — no axis yet, that is what we are
+    // judging. Same atan2 form as bevel_angle for the near-flat case.
+    return bevel_angle(g_flat, {0.0f, 0.0f, 0.0f}, g_raised);
+}
+
+float mount_skew_deg(Vec3 edge_axis) {
+    Vec3 e;
+    if (!try_unit(edge_axis, e)) return 90.0f;
+    // Stick long axis is body +Y on every supported M5Stick (USB-down, screen
+    // toward you). The hinge should sit near that axis when the magnet is on
+    // the blade flat.
+    float d = std::fabs(e.y);
+    if (d > 1.0f) d = 1.0f;
+    return std::acos(d) * (180.0f / (float)M_PI);
+}
+
+bool remount_suspected(Vec3 g_flat, Vec3 edge_axis, Vec3 g_now) {
+    Vec3 f, n, e;
+    if (!try_unit(g_flat, f) || !try_unit(g_now, n)) return false;
+    if (!try_unit(edge_axis, e)) return true;
+    // A pure bevel rotation stays perpendicular to the hinge. A remount that
+    // yaws the stick on the flat walks this component away from the capture.
+    if (std::fabs(std::fabs(dot(n, e)) - std::fabs(dot(f, e))) > 0.25f) return true;
+    return bevel_angle(g_flat, edge_axis, g_now) > 40.0f;
+}
+
+float lateral_accel_g(Vec3 accel_g, Vec3 gravity) {
+    Vec3 la = { accel_g.x - gravity.x, accel_g.y - gravity.y, accel_g.z - gravity.z };
+    float la_v = dot(la, gravity);
+    Vec3 la_h = { la.x - la_v * gravity.x, la.y - la_v * gravity.y, la.z - la_v * gravity.z };
+    return std::sqrt(dot(la_h, la_h));
+}

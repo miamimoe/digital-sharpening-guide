@@ -207,7 +207,7 @@
 <body>
   <div class="wrap">
     <header>
-      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.0.2</span></p>
+      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.1.0</span></p>
       <h1>Digital Sharpening Guide</h1>
       <p class="sub">A magnet-backed angle guide for your knives. Stick it to the blade, set a target angle, and the screen holds green while you hold the bevel. Flash it to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page — no toolchain, just a USB-C cable.</p>
     </header>
@@ -281,7 +281,7 @@
     <div class="step">
       <h2><span class="n">03</span> After flashing</h2>
       <ol>
-        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.0.2</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
+        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.1.0</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
         <li>Stick it onto the knife's flat — the magnet is in the back — and follow the on-screen calibration.</li>
         <li>The full walkthrough and control reference are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
       </ol>
@@ -289,17 +289,19 @@
 
     <div class="step log">
       <h2><span class="n">&#9670;</span> What's new</h2>
-      <h3>v1.0.2</h3>
+      <h3>v1.1.0</h3>
       <ul>
-        <li><strong>Re-zero now does what the screen says.</strong> During an in-place re-zero, tapping <strong>B</strong> force-captures the reference — exactly as the "tap B to capture" hint promises. (It used to silently cancel instead.) To cancel a re-zero, hold <strong>A</strong>.</li>
-        <li><strong>No duplicate history entries.</strong> If the device went to sleep while showing the session summary, the finished session could be offered for "resume" and end up recorded twice. A finished session now stays finished.</li>
-        <li><strong>An abandoned calibration can't drain the battery.</strong> A capture that never completes (say the device ends up jostling around in a bag) used to hold the device awake indefinitely. It now gives up after a minute and lets the normal auto-sleep take over.</li>
-        <li><strong>No stray beep at session start.</strong> With the buzzer on, the first moment of a session no longer beeps as if you'd just fallen off the angle.</li>
-        <li><strong>Sleep keeps your stats.</strong> Session time and time-on-angle accumulated since your last stroke are no longer lost when the device sleeps mid-session (idle or power button).</li>
-        <li>Also: the accuracy-check screen no longer flickers, the buzzer on/off overlay no longer leaves a black box behind, the WRONG FIRMWARE screen dims to protect the battery, and Plus2 owners get their own <a href="beta.html">diagnostic build</a>.</li>
+        <li><strong>Learn your stroke.</strong> After zero-cal, do about ten passes and tap <strong>A</strong>. The counter locks to your motion. Tap <strong>B</strong> to skip.</li>
+        <li><strong>Peel asks SAME / OTHER.</strong> Lift the knife and set it back down: <strong>A</strong> switches side, <strong>B</strong> (or three seconds) keeps this one. A normal stroke will not trigger it.</li>
+        <li><strong>Faster green when you correct.</strong> Smoothing shortens while you rotate about the edge and stays long while you stroke. A tick under ANGLE shows which way you are off before the colour flips.</li>
+        <li><strong>Calibration fails out loud.</strong> A raise under 8&#176; is refused. A good raise shows <strong>AXIS OK</strong>. Remounting the stick mid-session forces a full re-cal.</li>
       </ul>
       <details>
         <summary>Earlier releases</summary>
+        <h3>v1.0.2</h3>
+        <ul>
+          <li>Re-zero <strong>B</strong> now force-captures as the screen says. Abandoned calibration times out. No stray beep at session start. Sleep keeps session stats. No duplicate history after sleeping on the summary.</li>
+        </ul>
         <h3>v1.0.1</h3>
         <ul>
           <li><strong>Battery icon no longer reads empty at boot.</strong> The power chip's sensor is switched on moments before the first reading, so a fully charged device could show a flat battery for its first ten seconds. It now shows a dash until a real reading arrives (about a second).</li>

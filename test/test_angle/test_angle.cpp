@@ -54,6 +54,31 @@ void test_edge_axis_from_flat_and_raise(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, e.z);
 }
 
+void test_raise_angle_matches_known_tilt(void) {
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 17.0f, raise_angle_deg(flat, deg_pose(17.0f, 0.0f)));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, raise_angle_deg(flat, flat));
+}
+
+void test_raise_below_minimum_is_refused_by_constant(void) {
+    TEST_ASSERT_TRUE(raise_angle_deg({0,0,-1}, deg_pose(5.0f, 0.0f)) < MIN_RAISE_DEG);
+    TEST_ASSERT_TRUE(raise_angle_deg({0,0,-1}, deg_pose(17.0f, 0.0f)) >= MIN_RAISE_DEG);
+}
+
+void test_remount_when_hinge_component_walks(void) {
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    Vec3 e    = {1.0f, 0.0f, 0.0f};
+    // Yawed remount: gravity now has a large X component along the old hinge.
+    Vec3 remounted = {0.50f, 0.0f, -0.8660254f};
+    TEST_ASSERT_TRUE(remount_suspected(flat, e, remounted));
+    TEST_ASSERT_FALSE(remount_suspected(flat, e, deg_pose(17.0f, 0.0f)));
+}
+
+void test_lateral_accel_is_zero_when_accel_is_gravity(void) {
+    Vec3 g = {0.0f, 0.2924f, -0.9563f};
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, lateral_accel_g(g, g));
+}
+
 void test_edge_axis_degenerate_on_tiny_raise(void) {
     Vec3 flat = {0.0f, 0.0f, -1.0f};
     Vec3 e = compute_edge_axis(flat, flat);   // no raise
@@ -154,6 +179,10 @@ int main(int, char**) {
     RUN_TEST(test_classify_below_target_is_blue_not_red);
     RUN_TEST(test_classify_tolerance_boundaries_are_green);
     RUN_TEST(test_edge_axis_from_flat_and_raise);
+    RUN_TEST(test_raise_angle_matches_known_tilt);
+    RUN_TEST(test_raise_below_minimum_is_refused_by_constant);
+    RUN_TEST(test_remount_when_hinge_component_walks);
+    RUN_TEST(test_lateral_accel_is_zero_when_accel_is_gravity);
     RUN_TEST(test_edge_axis_degenerate_on_tiny_raise);
     RUN_TEST(test_bevel_flat_is_zero);
     RUN_TEST(test_bevel_equals_raise_no_skew);

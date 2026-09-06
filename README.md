@@ -6,7 +6,7 @@
 - 🟦 **Blue** — too low, raise the spine
 - 🟥 **Red** — too high, lower the spine
 
-Plus automatic per-side stroke counting (for balanced bevels), an optional out-of-tolerance buzzer, and an end-of-session summary.
+Plus per-side stroke counting (learned from your first ten passes), a peel prompt when you flip the knife, an optional out-of-tolerance buzzer, and an end-of-session summary.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/hardware-M5StickC%20Plus%20%7C%20Plus2%20%7C%20S3-blue)
@@ -24,7 +24,18 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v1.0.2
+## What's new in v1.1.0
+
+**The coach now learns your stroke, asks when you flip the knife, and refuses a bad calibration instead of quietly guessing.**
+
+- **Learn your stroke.** After zero-cal, do about ten passes and tap **A**. The counter locks to *your* peak, not a factory 0.18 g guess. Tap **B** to skip and keep the default.
+- **Peel asks SAME / OTHER.** Lifting the knife off the stone and putting it back now asks `FLIPPED?` — **A** switches side, **B** (or three seconds) keeps this one. A normal stroke will not trigger it. You can still tap **B** mid-session to switch by hand.
+- **Green arrives faster when you correct.** Smoothing stays long while you stroke (so the sweep cannot yank the number) and shortens while you rotate about the edge. A small tick under ANGLE shows which way you are off before the colour flips.
+- **Calibration fails out loud.** A raise under 8° is refused (`RAISE MORE`) instead of silently falling back to raw tilt. A good raise shows `AXIS OK` with the raise and skew. Remounting the stick mid-session forces a full re-cal, not a confident wrong angle.
+
+[**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
+
+### From v1.0.2
 
 **A round of fixes from a full code audit.** No new features — five behavioral bugs and four cosmetic ones, all found in a line-by-line review of v1.0.0 and fixed test-first:
 
@@ -165,18 +176,20 @@ Once flashed, the device walks you through everything on-screen. A full session:
 3. **Set tolerance.** Press **B** to cycle `TIGHT ±2°` / `NORMAL ±3°` / `EASY ±5°`, then **A** to confirm. (Start with NORMAL or EASY.)
 4. **Zero-calibrate (2 quick steps).** This is what makes it angle-accurate regardless of how the device is rotated on the blade:
    - **Step 1/2 — "Lay flat on stone":** rest the blade flat on your stone, press **A**, hold still for the countdown.
-   - **Step 2/2 — "Raise to your angle":** lift the spine to roughly your sharpening angle, press **A**, hold still.
+   - **Step 2/2 — "Raise to your angle":** lift the spine to roughly your sharpening angle, press **A**, hold still. A raise under 8° is refused (`RAISE MORE`) — lift higher and try again.
+   - You'll see **AXIS OK** with the captured raise and skew, then **LEARN STROKE**.
    - *(If it says "KEEP STILL", just set it down for a second — or tap **B** to force the capture.)*
-5. **Sharpen.** The whole screen turns **green / blue / red**. Chase green. The center number is your stroke count for the current side.
-6. **Switch sides.** When you flip the knife to sharpen the other face, **press B** to switch the device to the other side — that side's stroke count picks up where it left off. *(If the angle has drifted, short-press **A** to re-zero the flat reference in place — lay the blade flat and hold still, or tap **B** to force the capture. If you physically re-stuck the device somewhere else on the blade, end the session and calibrate fresh instead: the in-place re-zero can't recover the edge axis for a new mount.)*
-7. **End the session.** **Long-press A** → `SESSION` summary (target, tolerance, strokes per side, time, time on-angle). Press **A** for a new session, **hold B** for your last five sessions, or **B** to sleep.
+5. **Learn your stroke (or skip).** Do about ten passes on the stone and tap **A** so the counter matches your motion. Tap **B** to skip and use the factory threshold.
+6. **Sharpen.** The whole screen turns **green / blue / red**. Chase green. A small tick under ANGLE shows which way you are off. The right-hand number is your stroke count for the current side.
+7. **Switch sides.** Flip the knife; when you set it back down the device asks `FLIPPED?` — **A** = other side, **B** = same. You can still **press B** mid-session to switch by hand. *(If the angle has drifted, short-press **A** to re-zero the flat reference in place. If you physically re-stuck the device somewhere else on the blade, it will send you back through zero-cal — a remount moves the edge axis.)*
+8. **End the session.** **Long-press A** → `SESSION` summary (target, tolerance, strokes per side, time, time on-angle). Press **A** for a new session, **hold B** for your last five sessions, or **B** to sleep.
 
 ### Controls
 
 | Button | Short press | Long press |
 |---|---|---|
-| **A** (front) | confirm / capture / re-zero | **end session** (→ summary) / **accuracy check** (SET TARGET) |
-| **B** (side) | cycle option / switch blade side | **toggle buzzer** (ACTIVE) / **toggle steady mode** (TOLERANCE) / **session history** (SUMMARY) |
+| **A** (front) | confirm / capture / lock stroke learn / other side (after a peel) / re-zero | **end session** (→ summary) / **accuracy check** (SET TARGET) |
+| **B** (side) | cycle option / skip stroke learn / same side (after a peel) / switch blade side | **toggle buzzer** (ACTIVE) / **toggle steady mode** (TOLERANCE) / **session history** (SUMMARY) |
 | **Power** (left side) | sleep / wake | hold 6 s = full power-off (AXP192 / Plus only — see note below) |
 
 
@@ -211,14 +224,14 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | Angle reads drifted after flipping the knife | Short-press **A** to re-zero in place (lay flat, hold still — or tap **B** to force it). |
 | Angle reads wrong after re-sticking the device on the blade | End the session (**hold A**, then **A**) and run the two-step calibration again — a re-mount moves the edge axis, which the in-place re-zero deliberately doesn't touch. |
 | `IMU FAULT` on boot | Power-cycle. If it persists, re-flash; this is the documented MPU6886/AXP192 I²C quirk — see [`docs/`](docs/). |
-| Stroke count is off by a few | Known — thresholds are still being tuned. Please send your numbers (see [Contributing](#contributing)). |
+| Stroke count is off by a few | Re-run the session and tap **A** on LEARN STROKE after ten of *your* passes. If it's still off, send your numbers (see [Contributing](#contributing)). |
 | Plus2 wakes, then sleeps when you let go of the power key | Fixed in v0.3.0 — it now ignores that wake press. Re-flash from the [flasher](https://miamimoe.github.io/digital-sharpening-guide/). |
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v1.0.2)
+## Known limitations (v1.1.0)
 
-- Stroke-count and Mahony `kp/ki` thresholds are first-pass guesses still being tuned on real stones.
+- Stroke-count thresholds start as a factory guess; LEARN STROKE tunes them to you, but a very light or very heavy hand can still be off by a pass or two.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
 - **Board support:** the **M5StickC Plus** is validated on real hardware. The **M5StickC Plus2** and **M5StickS3** are compile-verified and code-reviewed against M5Stack datasheets, but not yet confirmed on a physical device — if you own one, please flash it and open a [GitHub issue](https://github.com/miamimoe/digital-sharpening-guide/issues) with results. That includes the battery icon: the Plus2 reads its cell through an ADC divider and the S3 through the M5PM1, neither of which has been checked against a real charge curve yet.
 

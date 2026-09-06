@@ -181,6 +181,20 @@ void App::transition(State to, uint32_t now_ms) {
             // every predecessor screen having cleared it on its way out.
             ui::clear();
             zc_rendered_ = ZeroCalSubstate::DONE;
+            zc_raise_retry_ = false;
+            // Remount mid-session must not wipe stroke counts.
+            zero_cal_keep_stats_ = (from == State::ACTIVE || from == State::SIDE_CONFIRM);
+            break;
+        case State::CAL_RESULT:
+            ui::draw_cal_result(cal_raise_deg_, cal_skew_deg_);
+            break;
+        case State::STROKE_LEARN:
+            learner_.reset();
+            stroke_fsm_.reset_thresholds();
+            ui::clear();
+            break;
+        case State::SIDE_CONFIRM:
+            ui::draw_side_confirm(side_fsm_.current_side());
             break;
         case State::REZERO:
             // Repaint from scratch: clearing also invalidates the zero-cal
@@ -195,6 +209,11 @@ void App::transition(State to, uint32_t now_ms) {
             // Do NOT reset side_fsm_ here: the resume path (RESUME_PROMPT->ACTIVE)
             // must keep the side restored in begin(). Fresh sessions reset the
             // side explicitly in handle_zero_cal before transitioning here.
+            if (from == State::SIDE_CONFIRM || from == State::STROKE_LEARN) {
+                peel_fsm_.suppress(now_ms);
+            } else {
+                peel_fsm_.reset();
+            }
             save_session_();
             break;
         }
@@ -254,7 +273,13 @@ void App::flush_session_for_sleep() {
     // REZERO is still a live session (the zero refresh happens in place), so it
     // flushes too. SUMMARY/SLEEP deliberately do not: those sessions are over
     // and their RTC state was already cleared.
-    if (state_ == State::ACTIVE || state_ == State::REZERO) save_session_();
+    // Only a live session is resumable. CAL_RESULT / STROKE_LEARN have a
+    // zero but no learned thresholds yet — saving here would wake into
+    // ACTIVE with factory stroke peaks and skip the learn screen.
+    if (state_ == State::ACTIVE || state_ == State::REZERO
+        || state_ == State::SIDE_CONFIRM) {
+        save_session_();
+    }
 }
 
 void App::save_session_() {
@@ -350,13 +375,27 @@ void App::handle_zero_cal(const Tick& t) {
                 if (zc_fsm_.done()) { raised = zc_fsm_.result(); done = true; }
             }
             if (done) {
-                // {0,0,0} if the raise was too small — bevel_angle then falls back
-                // to the total-tilt method, so this degrades gracefully.
-                edge_axis_ = compute_edge_axis(g_flat_, raised);
-                zc_substate_ = ZeroCalSubstate::DONE;
-                green_ticks_ = active_ticks_ = 0;
-                side_fsm_.reset();   // fresh session begins on side A
-                transition(State::ACTIVE, t.now_ms);
+                const float raise = raise_angle_deg(g_flat_, raised);
+                if (raise < MIN_RAISE_DEG) {
+                    // Refuse a silent fallback to raw tilt — the user would
+                    // trust a number that is no longer about the edge.
+                    edge_axis_ = {0.0f, 0.0f, 0.0f};
+                    zc_fsm_ = zero_cal::CaptureFSM{};
+                    zc_raise_retry_ = true;
+                    zc_substate_ = ZeroCalSubstate::PROMPT_RAISE;
+                    break;
+                }
+                edge_axis_     = compute_edge_axis(g_flat_, raised);
+                cal_raise_deg_ = raise;
+                cal_skew_deg_  = mount_skew_deg(edge_axis_);
+                zc_substate_   = ZeroCalSubstate::DONE;
+                if (!zero_cal_keep_stats_) {
+                    green_ticks_ = active_ticks_ = 0;
+                    side_fsm_.reset();
+                    stroke_fsm_.reset();
+                    stroke_fsm_.reset_thresholds();
+                }
+                transition(State::CAL_RESULT, t.now_ms);
             }
             break;
         }
@@ -389,17 +428,15 @@ void App::handle_zero_cal(const Tick& t) {
         last_activity_ms_ = t.now_ms;
     }
 
-    bool retry = false;  // v1: no retry cue. Add later if hardware testing shows users miss the signal.
-
     // Prompt screens are static — redraw only on substate change (avoid a 50 Hz
     // full-screen fillScreen flicker). Progress self-throttles in ui.cpp.
     switch (zc_substate_) {
         case ZeroCalSubstate::PROMPT_FLAT:
-            if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(1, retry);
+            if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(1, false);
             break;
         case ZeroCalSubstate::CAPTURE_FLAT:  ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
         case ZeroCalSubstate::PROMPT_RAISE:
-            if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(2, retry);
+            if (zc_rendered_ != zc_substate_) ui::draw_zero_cal_prompt(2, zc_raise_retry_);
             break;
         case ZeroCalSubstate::CAPTURE_RAISE: ui::draw_zero_cal_progress(total_capture_ms_remaining, moving); break;
         case ZeroCalSubstate::DONE:          break;
@@ -465,15 +502,23 @@ void App::handle_set_tolerance(const Tick& t) {
     }
 }
 
-void App::handle_active(const Tick& t) {
+void App::apply_adaptive_tau_(const Tick& t) {
+    if (!steady_) return;
+    float em2 = edge_axis_.x*edge_axis_.x + edge_axis_.y*edge_axis_.y + edge_axis_.z*edge_axis_.z;
+    if (em2 < 1e-6f) return;
+    float inv = 1.0f / std::sqrt(em2);
+    float edge_rate = std::fabs((t.gyro_dps.x * edge_axis_.x
+                               + t.gyro_dps.y * edge_axis_.y
+                               + t.gyro_dps.z * edge_axis_.z) * inv);
+    filter_.adjust_accel_tau(edge_rate > mahony::CORRECT_EDGE_DPS
+        ? mahony::ACCEL_LP_TAU_CORRECT_S
+        : mahony::ACCEL_LP_TAU_S);
+}
+
+void App::sample_live_(const Tick& t, float& bevel, float& lat, ColorState& col) {
+    apply_adaptive_tau_(t);
     filter_.update(t.gyro_dps, t.accel_g);
     refresh_bias_if_still_(t.accel_g, t.gyro_dps);
-    // Snap-to-raw recovery: when the device is verified still but the filter's
-    // gravity estimate still lags (e.g. just after a side flip, or on the first
-    // ACTIVE tick before Mahony has converged), re-anchor to the raw accel so the
-    // color/angle is correct immediately instead of after ~2 s of convergence.
-    // Cooldown prevents re-snapping every tick if the filter ever settles with a
-    // residual above SNAP_DIVERGENCE_DEG (possible only if kp is tuned very low).
     if (snap_cooldown_ > 0) {
         --snap_cooldown_;
     } else if (mahony::should_snap(filter_.gravity(), t.accel_g, t.gyro_dps)) {
@@ -481,33 +526,24 @@ void App::handle_active(const Tick& t) {
         snap_cooldown_ = mahony::SNAP_COOLDOWN_TICKS;
     }
     Vec3 g_now = filter_.gravity();
+    bevel = bevel_angle(g_flat_, edge_axis_, g_now);
+    lat   = lateral_accel_g(t.accel_g, g_now);
+    col   = classify(bevel, target_deg_, tolerance_degrees(tol_),
+                     prev_color_,
+                     (steady_ && color_valid_) ? CLASSIFY_HYSTERESIS_DEG : 0.0f);
+}
 
-    // Skew-corrected bevel about the captured edge axis. One reference (g_flat_,
-    // edge_axis_) serves both blade faces — the flipped face is folded internally.
-    float bevel = bevel_angle(g_flat_, edge_axis_, g_now);
-    // Whether prev_color_ carries a real classification: it initializes to GREEN,
-    // so without this the first non-GREEN tick would read as a GREEN->non-GREEN
-    // edge and beep even though the user never left tolerance.
+void App::handle_active(const Tick& t) {
+    float bevel = 0.0f, lat = 0.0f;
+    ColorState col = ColorState::GREEN;
+    sample_live_(t, bevel, lat, col);
     const bool had_prev_color = color_valid_;
-    ColorState col = classify(bevel, target_deg_, tolerance_degrees(tol_),
-                              prev_color_,
-                              (steady_ && color_valid_) ? CLASSIFY_HYSTERESIS_DEG : 0.0f);
     color_valid_ = true;
 
     ++active_ticks_;
     if (col == ColorState::GREEN) ++green_ticks_;
 
-    // Horizontal linear acceleration = the stroke motion (gravity removed, then
-    // the component in the stone plane). g_now is a unit vector, so accel - g_now
-    // is the linear part in g; project out the vertical to isolate the sweep.
-    Vec3 la = { t.accel_g.x - g_now.x, t.accel_g.y - g_now.y, t.accel_g.z - g_now.z };
-    float la_v = la.x*g_now.x + la.y*g_now.y + la.z*g_now.z;
-    Vec3 la_h = { la.x - la_v*g_now.x, la.y - la_v*g_now.y, la.z - la_v*g_now.z };
-    float lat = std::sqrt(la_h.x*la_h.x + la_h.y*la_h.y + la_h.z*la_h.z);
-
-    // Sustained stroke motion counts as activity even when no stroke is counted
-    // (e.g. the user never reaches green), so the device can't deep-sleep mid-use.
-    if (lat >= StrokeFSM::PEAK_LOW_G) last_activity_ms_ = t.now_ms;
+    if (lat >= stroke_fsm_.peak_low()) last_activity_ms_ = t.now_ms;
 
     bool in_tol = (col == ColorState::GREEN);
     uint32_t before = stroke_fsm_.stroke_count();
@@ -516,25 +552,32 @@ void App::handle_active(const Tick& t) {
         if (side_fsm_.current_side() == Side::A) strokes_a_++;
         else                                      strokes_b_++;
         last_stroke_ms_ = t.now_ms;
-        save_session_();   // keep RTC RAM current so idle-sleep preserves counts
+        save_session_();
     }
 
-    // Automatic gravity-polarity side detection is intentionally NOT run here.
-    // In real use the device sits screen-up on BOTH blade faces (you flip the
-    // knife, not the device), so gravity does not reverse between sides and the
-    // polarity signal can't distinguish them — and worse, it would override the
-    // user's manual choice. Side is controlled manually by B short-press below,
-    // which is authoritative and sticks. (SideFSM::update remains available and
-    // unit-tested for a future mount where the polarity does flip.)
+    const float a_mag = std::sqrt(t.accel_g.x*t.accel_g.x
+                                + t.accel_g.y*t.accel_g.y
+                                + t.accel_g.z*t.accel_g.z);
+    const float g_mag = std::sqrt(t.gyro_dps.x*t.gyro_dps.x
+                                + t.gyro_dps.y*t.gyro_dps.y
+                                + t.gyro_dps.z*t.gyro_dps.z);
+    peel_fsm_.update(t.now_ms, a_mag, g_mag);
+    if (peel_fsm_.consume_settled()) {
+        last_activity_ms_ = t.now_ms;
+        if (remount_suspected(g_flat_, edge_axis_, filter_.gravity())) {
+            zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
+            transition(State::ZERO_CAL, t.now_ms);
+            return;
+        }
+        transition(State::SIDE_CONFIRM, t.now_ms);
+        return;
+    }
 
     if (t.input == InputEvent::A_LONG) {
         transition(State::SUMMARY, t.now_ms);
         return;
     }
     if (t.input == InputEvent::A_SHORT) {
-        // Re-capture g_flat_ in place (drift, or a bad flat capture), then return
-        // to ACTIVE with the fresh reference. Deliberately does NOT recapture
-        // edge_axis_ — see handle_rezero; a physical re-mount needs a full zero-cal.
         transition(State::REZERO, t.now_ms);
         return;
     }
@@ -542,14 +585,13 @@ void App::handle_active(const Tick& t) {
         side_fsm_.manual_toggle(t.now_ms);
         side_fsm_.consume_switch();
         stroke_fsm_.reset();
+        peel_fsm_.suppress(t.now_ms);
         last_activity_ms_ = t.now_ms;
-        save_session_();   // persist the manually-toggled side to RTC RAM
+        save_session_();
     }
     if (t.input == InputEvent::B_LONG) {
         buzzer_on_ = !buzzer_on_;
         settings::save_buzzer(buzzer_on_);
-        // Audible confirmation when enabling — also a self-test that the buzzer
-        // works (silence on disable confirms "off").
         if (buzzer_on_) feedback::beep_confirm();
         buzzer_flash_until_   = t.now_ms + 800;
         buzzer_flash_showing_ = true;
@@ -559,8 +601,6 @@ void App::handle_active(const Tick& t) {
     }
 
     feedback::set_color(col);
-    // Beep only on the edge GREEN -> non-GREEN, not every tick — and only when
-    // prev_color_ is a real prior classification (see had_prev_color above).
     if (buzzer_on_ && had_prev_color
         && col != ColorState::GREEN && prev_color_ == ColorState::GREEN) {
         feedback::beep_out_of_tolerance();
@@ -571,8 +611,65 @@ void App::handle_active(const Tick& t) {
                       side_fsm_.current_side(),
                       strokes_a_, strokes_b_,
                       buzzer_flash_showing_, buzzer_on_,
-                      bevel, steady_ };
+                      bevel, steady_,
+                      bevel - target_deg_,
+                      tolerance_degrees(tol_) };
     ui::draw_active(v);
+}
+
+void App::handle_cal_result(const Tick& t) {
+    if (t.input == InputEvent::A_SHORT || t.input == InputEvent::B_SHORT
+        || t.now_ms - state_entered_ms_ >= 2000) {
+        transition(State::STROKE_LEARN, t.now_ms);
+    }
+}
+
+void App::handle_stroke_learn(const Tick& t) {
+    if (t.input == InputEvent::A_LONG) {
+        transition(State::SET_TARGET, t.now_ms);
+        return;
+    }
+    float bevel = 0.0f, lat = 0.0f;
+    ColorState col = ColorState::GREEN;
+    sample_live_(t, bevel, lat, col);
+    color_valid_ = true;
+    prev_color_  = col;
+    learner_.update(t.now_ms, lat);
+    if (lat >= StrokeLearner::DETECT_LOW_G) last_activity_ms_ = t.now_ms;
+
+    if (t.input == InputEvent::A_SHORT) {
+        learner_.commit(stroke_fsm_);
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    if (t.input == InputEvent::B_SHORT) {
+        stroke_fsm_.reset_thresholds();
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    feedback::set_color(col);
+    ui::draw_stroke_learn(learner_.peaks(), col, bevel);
+}
+
+void App::handle_side_confirm(const Tick& t) {
+    float bevel = 0.0f, lat = 0.0f;
+    ColorState col = ColorState::GREEN;
+    sample_live_(t, bevel, lat, col);
+    if (lat >= stroke_fsm_.peak_low()) last_activity_ms_ = t.now_ms;
+
+    if (t.input == InputEvent::A_SHORT) {
+        side_fsm_.manual_toggle(t.now_ms);
+        side_fsm_.consume_switch();
+        stroke_fsm_.reset();
+        save_session_();
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    if (t.input == InputEvent::B_SHORT || t.now_ms - state_entered_ms_ >= 3000) {
+        transition(State::ACTIVE, t.now_ms);
+        return;
+    }
+    feedback::set_color(col);
 }
 
 void App::handle_rezero(const Tick& t) {
@@ -765,7 +862,10 @@ void App::on_tick(const Tick& t) {
         case State::ZERO_CAL:      handle_zero_cal(t); break;
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
+        case State::CAL_RESULT:    handle_cal_result(t); break;
+        case State::STROKE_LEARN:  handle_stroke_learn(t); break;
         case State::ACTIVE:        handle_active(t); break;
+        case State::SIDE_CONFIRM:  handle_side_confirm(t); break;
         case State::REZERO:        handle_rezero(t); break;
         case State::VERIFY:        handle_verify(t); break;
         case State::SUMMARY:       handle_summary(t); break;

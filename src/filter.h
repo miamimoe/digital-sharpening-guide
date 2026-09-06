@@ -22,6 +22,10 @@ public:
     // tau_s = 0 disables it (raw accel — the pre-0.3.0 behaviour), which is what
     // makes an A/B comparison on one device possible.
     void set_accel_tau(float tau_s) { a_tau_ = (tau_s > 0.0f) ? tau_s : 0.0f; a_lp_valid_ = false; }
+    // Change tau without dropping the low-pass state. Adaptive response in
+    // ACTIVE calls this every tick; resetting would re-seed and cancel the filter.
+    void adjust_accel_tau(float tau_s) { a_tau_ = (tau_s > 0.0f) ? tau_s : 0.0f; }
+    float accel_tau() const { return a_tau_; }
     // The smoothed gravity reference actually fed to the correction step, for
     // diagnostics. Equals the last raw accel when smoothing is off.
     Vec3 accel_reference() const { return a_lp_valid_ ? a_lp_ : Vec3{0.0f, 0.0f, 0.0f}; }
@@ -74,6 +78,11 @@ namespace mahony {
     // attenuates a 1 Hz disturbance ~4x and 2 Hz ~9x before the Mahony correction
     // (itself a 1/kp = 1.25 s low-pass) sees it at all.
     constexpr float ACCEL_LP_TAU_S      = 0.7f;
+    // Short tau while the user is rotating about the edge (correcting the
+    // angle). Long tau — the default — while they are stroking, so the 0.18 g
+    // sweep cannot steer gravity. Adaptive path uses adjust_accel_tau().
+    constexpr float ACCEL_LP_TAU_CORRECT_S = 0.15f;
+    constexpr float CORRECT_EDGE_DPS       = 15.0f;
 
     // --- Continuous gyro-bias refresh (see App::refresh_bias_if_still_) ---
     //

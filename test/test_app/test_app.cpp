@@ -42,12 +42,24 @@ static void drive_moving(App& a, uint32_t& t, uint32_t dur_ms) {
     }
 }
 
+// After a successful raise the session now stops on CAL_RESULT, then
+// STROKE_LEARN. Tests that just want ACTIVE skip the learn with B.
+static void skip_learn_to_active(App& a, uint32_t& t, Vec3 pose) {
+    if (a.current() == State::CAL_RESULT) {
+        advance(a, t, 100, InputEvent::A_SHORT, pose);
+    }
+    if (a.current() == State::STROKE_LEARN) {
+        advance(a, t, 100, InputEvent::B_SHORT, pose);
+    }
+}
+
 // From ZERO_CAL/PROMPT_FLAT: capture flat then raise, landing in ACTIVE.
 static void zero_cal_flat_raise(App& a, uint32_t& t, Vec3 flat_pose, Vec3 raise_pose) {
     advance(a, t, 100, InputEvent::A_SHORT, flat_pose);   // -> CAPTURE_FLAT
     drive_still(a, t, flat_pose);                          // -> PROMPT_RAISE
     advance(a, t, 100, InputEvent::A_SHORT, raise_pose);   // -> CAPTURE_RAISE
-    drive_still(a, t, raise_pose);                         // -> ACTIVE
+    drive_still(a, t, raise_pose);                         // -> CAL_RESULT
+    skip_learn_to_active(a, t, raise_pose);
 }
 
 void setUp(void) {
@@ -583,6 +595,9 @@ void test_zero_cal_flat_raise_flow_advances_to_active(void) {
     Vec3 raise = {0.0f, 0.2924f, -0.9563f};   // 17 deg about edge (body +x)
     advance(a, t, 100, InputEvent::A_SHORT, raise);
     drive_still(a, t, raise);
+    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
+    TEST_ASSERT_TRUE(a.cal_raise_deg() >= 8.0f);
+    skip_learn_to_active(a, t, raise);
     TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
 
     Vec3 gf = a.g_flat();
@@ -828,6 +843,108 @@ void test_beep_fires_on_green_to_nongreen_edge(void) {
     TEST_ASSERT_EQUAL_INT(1, feedback::test_beep_out_count());
 }
 
+void test_stroke_learn_flush_does_not_mark_session(void) {
+    App a;
+    uint32_t t = 0;
+    a.begin(false);
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    drive_still(a, t, {0.0f, 0.0f, -1.0f});
+    advance(a, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
+    drive_still(a, t, (Vec3){0.0f, 0.2924f, -0.9563f});
+    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)a.current());
+    a.flush_session_for_sleep();
+    TEST_ASSERT_FALSE(session::has_session());
+    advance(a, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::STROKE_LEARN, (int)a.current());
+    a.flush_session_for_sleep();
+    TEST_ASSERT_FALSE(session::has_session());
+}
+
+void test_tiny_raise_stays_in_zero_cal(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);   // ZERO_CAL
+    Vec3 flat = {0.0f, 0.0f, -1.0f};
+    advance(a, t, 100, InputEvent::A_SHORT, flat);
+    drive_still(a, t, flat);
+    // 4 deg raise — below MIN_RAISE_DEG.
+    const float r4 = 4.0f * (float)M_PI / 180.0f;
+    Vec3 tiny = {0.0f, std::sin(r4), -std::cos(r4)};
+    advance(a, t, 100, InputEvent::A_SHORT, tiny);
+    drive_still(a, t, tiny);
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_RAISE, (int)a.zero_cal_substate());
+}
+
+void test_stroke_learn_a_locks_thresholds(void) {
+    App b;
+    uint32_t t = 0;
+    b.begin(false);
+    advance(b, t, 2100);
+    advance(b, t, 100, InputEvent::A_SHORT);
+    advance(b, t, 100, InputEvent::A_SHORT);
+    advance(b, t, 100, InputEvent::A_SHORT, {0.0f, 0.0f, -1.0f});
+    drive_still(b, t, {0.0f, 0.0f, -1.0f});
+    advance(b, t, 100, InputEvent::A_SHORT, (Vec3){0.0f, 0.2924f, -0.9563f});
+    drive_still(b, t, (Vec3){0.0f, 0.2924f, -0.9563f});
+    TEST_ASSERT_EQUAL_INT((int)State::CAL_RESULT, (int)b.current());
+    advance(b, t, 100, InputEvent::A_SHORT);
+    TEST_ASSERT_EQUAL_INT((int)State::STROKE_LEARN, (int)b.current());
+    // Five lateral peaks at 0.30 g while on-angle.
+    for (int i = 0; i < 5; i++) {
+        Vec3 peak = {0.30f, 0.2924f, -0.9563f};
+        advance(b, t, 80, InputEvent::NONE, peak);
+        advance(b, t, 400, InputEvent::NONE, g_now_at_target_17);
+    }
+    TEST_ASSERT_TRUE(b.learn_peaks() >= 3);
+    advance(b, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)b.current());
+    TEST_ASSERT_TRUE(b.stroke_high_g() < StrokeFSM::PEAK_HIGH_G + 0.20f);
+    TEST_ASSERT_TRUE(b.stroke_high_g() > 0.09f);
+}
+
+void test_peel_asks_same_or_other(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
+    advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
+    advance(a, t, 400, InputEvent::NONE, g_now_at_target_17, {0,0,0});
+    TEST_ASSERT_EQUAL_INT((int)State::SIDE_CONFIRM, (int)a.current());
+    advance(a, t, 100, InputEvent::A_SHORT, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)Side::B, (int)a.current_side());
+}
+
+void test_peel_b_keeps_side(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
+    advance(a, t, 400, InputEvent::NONE, g_now_at_target_17, {0,0,0});
+    TEST_ASSERT_EQUAL_INT((int)State::SIDE_CONFIRM, (int)a.current());
+    advance(a, t, 100, InputEvent::B_SHORT, g_now_at_target_17);
+    TEST_ASSERT_EQUAL_INT((int)State::ACTIVE, (int)a.current());
+    TEST_ASSERT_EQUAL_INT((int)Side::A, (int)a.current_side());
+}
+
+void test_remount_after_peel_forces_zero_cal(void) {
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    // Airborne, then settle in a pose that walks the hinge component.
+    const Vec3 remounted = {0.50f, 0.0f, -0.8660254f};
+    advance(a, t, 250, InputEvent::NONE, {0.0f, 0.0f, -1.6f}, {0,0,0});
+    advance(a, t, 400, InputEvent::NONE, remounted, {0,0,0});
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+}
+
 void test_flush_for_sleep_persists_tick_counters(void) {
     // RTC RAM is only updated per stroke / side toggle; a sleep from ACTIVE
     // must flush the tick counters or everything since the last stroke is lost.
@@ -900,5 +1017,11 @@ int main(int, char**) {
     RUN_TEST(test_no_beep_on_first_active_tick);
     RUN_TEST(test_beep_fires_on_green_to_nongreen_edge);
     RUN_TEST(test_flush_for_sleep_persists_tick_counters);
+    RUN_TEST(test_stroke_learn_flush_does_not_mark_session);
+    RUN_TEST(test_tiny_raise_stays_in_zero_cal);
+    RUN_TEST(test_stroke_learn_a_locks_thresholds);
+    RUN_TEST(test_peel_asks_same_or_other);
+    RUN_TEST(test_peel_b_keeps_side);
+    RUN_TEST(test_remount_after_peel_forces_zero_cal);
     return UNITY_END();
 }

@@ -54,6 +54,9 @@ namespace {
     int  s_last_zc_tenths       = -1;
     bool s_last_zc_tenths_valid = false;
     bool s_last_zc_moving        = false;
+    int         s_last_learn_peaks = -1;
+    ColorState  s_last_learn_color = ColorState::GREEN;
+    int         s_last_error_px    = -999;
 
     uint16_t color_for(ColorState c) {
         switch (c) {
@@ -103,13 +106,16 @@ void clear() {
     s_last_zc_tenths_valid = false;
     s_shown_valid = false;
     s_last_verify_valid = false;
+    s_last_learn_peaks = -1;
+    s_last_learn_color = ColorState::GREEN;
+    s_last_error_px = -999;
 }
 
 void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v1.0.2", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.1.0", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
@@ -223,6 +229,28 @@ void draw_active(const ActiveView& v) {
         std::strncpy(s_last_angle, abuf, sizeof s_last_angle - 1);
         s_last_angle[sizeof s_last_angle - 1] = '\0';
         s_last_angle_valid = true;
+    }
+
+    // Signed error tick under ANGLE: left = too low, right = too high. Scaled
+    // so +-1.5 * tolerance fills the column. Lets you correct before the color
+    // band flips.
+    {
+        constexpr int BAR_Y = 122, BAR_X = 8, BAR_W = 104, BAR_H = 6;
+        float span = v.tol_deg * 1.5f;
+        if (span < 1.0f) span = 1.0f;
+        float n = v.error_deg / span;
+        if (n >  1.0f) n =  1.0f;
+        if (n < -1.0f) n = -1.0f;
+        int mid    = BAR_X + BAR_W / 2;
+        int tick_x = mid + (int)(n * (float)(BAR_W / 2 - 3));
+        if (color_changed || flash_ended || tick_x != s_last_error_px) {
+            M5.Display.fillRect(BAR_X - 1, BAR_Y, BAR_W + 2, BAR_H, bg);
+            M5.Display.fillRect(BAR_X, BAR_Y + 2, BAR_W, 2, COL_WHITE);
+            M5.Display.fillRect(mid, BAR_Y, 2, BAR_H, COL_WHITE);
+            M5.Display.fillRect(tick_x - 1, BAR_Y, 4, BAR_H, COL_BLACK);
+            M5.Display.drawRect(tick_x - 1, BAR_Y, 4, BAR_H, COL_WHITE);
+            s_last_error_px = tick_x;
+        }
     }
 
     // Draw the buzzer-flash overlay only when it newly appears or the area under
@@ -368,7 +396,7 @@ void draw_resume_prompt(float target_deg, Tolerance tol, uint32_t a, uint32_t b,
     draw_centered("A:Resume   B:New", 120, 1, COL_WHITE, COL_BLACK);
 }
 
-void draw_zero_cal_prompt(int step, bool retry) {
+void draw_zero_cal_prompt(int step, bool raise_more) {
     s_last_zc_tenths_valid = false;
     wipe(COL_BLACK);
     char hdr[16];
@@ -376,9 +404,48 @@ void draw_zero_cal_prompt(int step, bool retry) {
     draw_centered(hdr, 8, 2, COL_WHITE, COL_BLACK);
     draw_centered(step == 1 ? "Lay flat on stone" : "Raise to your angle", 40, 1, COL_WHITE, COL_BLACK);
     draw_centered("Press A, hold still", 60, 1, COL_WHITE, COL_BLACK);
-    if (retry) {
-        draw_centered("HOLD STILL", 92, 3, COL_RED, COL_BLACK);
+    if (raise_more) {
+        draw_centered("RAISE MORE", 88, 2, COL_RED, COL_BLACK);
+        draw_centered("need 8 deg+", 114, 1, COL_WHITE, COL_BLACK);
     }
+}
+
+void draw_cal_result(float raise_deg, float skew_deg) {
+    wipe(COL_BLACK);
+    draw_centered("AXIS OK", 10, 3, COL_GREEN, COL_BLACK);
+    char buf[28];
+    std::snprintf(buf, sizeof buf, "raise %d deg", (int)(raise_deg + 0.5f));
+    draw_centered(buf, 52, 2, COL_WHITE, COL_BLACK);
+    std::snprintf(buf, sizeof buf, "skew %d deg - ok", (int)(skew_deg + 0.5f));
+    draw_centered(buf, 80, 1, COL_WHITE, COL_BLACK);
+    draw_centered("A:Go", 118, 1, COL_WHITE, COL_BLACK);
+}
+
+void draw_stroke_learn(int peaks, ColorState color, float /*angle_deg*/) {
+    if (peaks == s_last_learn_peaks && s_last_learn_color == color) return;
+    const uint16_t bg = color_for(color);
+    wipe(bg);
+    draw_centered("LEARN STROKE", 8, 2, COL_WHITE, bg);
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%d / 10", peaks);
+    draw_centered(buf, 48, 4, COL_WHITE, bg);
+    draw_centered("Do 10, tap A", 96, 1, COL_WHITE, bg);
+    draw_centered("A:Done   B:Skip", 116, 1, COL_WHITE, bg);
+    s_last_learn_peaks = peaks;
+    s_last_learn_color = color;
+    // Leave s_last_valid false so the first ACTIVE frame after learn
+    // repaints its divider and headers instead of inheriting this color.
+    s_last_valid = false;
+}
+
+void draw_side_confirm(Side current) {
+    wipe(COL_BLACK);
+    draw_centered("FLIPPED?", 12, 3, COL_WHITE, COL_BLACK);
+    char buf[20];
+    std::snprintf(buf, sizeof buf, "now side %c", current == Side::A ? 'A' : 'B');
+    draw_centered(buf, 56, 2, COL_WHITE, COL_BLACK);
+    draw_centered("A:Other   B:Same", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("timeout keeps this side", 118, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_zero_cal_progress(int remaining_ms, bool moving) {
@@ -467,6 +534,9 @@ namespace ui {
     void draw_resume_prompt(float, Tolerance, uint32_t, uint32_t, int) {}
     void draw_zero_cal_prompt(int, bool) {}
     void draw_zero_cal_progress(int, bool) {}
+    void draw_cal_result(float, float) {}
+    void draw_stroke_learn(int, ColorState, float) {}
+    void draw_side_confirm(Side) {}
     void draw_battery(int, bool) {}
     void set_backlight(uint8_t) {}
 }

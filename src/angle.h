@@ -34,3 +34,19 @@ Vec3 compute_edge_axis(Vec3 g_flat, Vec3 g_raised);
 // bevel. The flipped blade face (gravity in the opposite hemisphere) is folded
 // back, so a single capture works on both sides. Returns 0 on degenerate input.
 float bevel_angle(Vec3 g_flat, Vec3 edge_axis, Vec3 g_now);
+
+// Angle between the flat and raised captures. A raise below MIN_RAISE_DEG cannot
+// define a trustworthy hinge; the capture must be refused, not silently degraded.
+constexpr float MIN_RAISE_DEG = 8.0f;
+float raise_angle_deg(Vec3 g_flat, Vec3 g_raised);
+
+// How far the captured hinge is from the stick's long axis (body +Y). Informational:
+// the maths already corrects for it. 0 = mounted square along the blade.
+float mount_skew_deg(Vec3 edge_axis);
+
+// True when a settled pose is inconsistent with the captured hinge — the stick
+// was remounted, not just peeled and put back. Force a full zero-cal.
+bool remount_suspected(Vec3 g_flat, Vec3 edge_axis, Vec3 g_now);
+
+// Horizontal linear acceleration (g), gravity removed. The stroke motion.
+float lateral_accel_g(Vec3 accel_g, Vec3 gravity);
