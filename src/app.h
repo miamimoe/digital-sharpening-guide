@@ -61,6 +61,7 @@ private:
     void handle_zero_cal        (const Tick& t);
     void handle_set_target      (const Tick& t);
     void handle_set_tolerance   (const Tick& t);
+    void handle_set_buzzer      (const Tick& t);
     void handle_active          (const Tick& t);
     void handle_rezero          (const Tick& t);
     void handle_verify          (const Tick& t);
@@ -143,6 +144,13 @@ private:
     // Track prior color so the buzzer beeps on the edge GREEN -> non-GREEN,
     // not every tick while out of tolerance.
     ColorState       prev_color_           = ColorState::GREEN;
+    // Debounce: even with edge-triggering above, an angle chattering right on
+    // the tolerance boundary (esp. with steady mode off, or a TIGHT tolerance)
+    // can re-cross the edge many times a second and machine-gun the buzzer.
+    // Enforce a minimum real-world gap between beeps on top of the edge check.
+    uint32_t         last_beep_ms_         = 0;
+    bool             beeped_before_        = false;
+    static constexpr uint32_t kMinBeepIntervalMs = 400;
     // False until ACTIVE has classified at least once, so colour hysteresis is
     // not applied against a meaningless prior state (see transition()).
     bool             color_valid_          = false;
