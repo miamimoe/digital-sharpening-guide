@@ -27,6 +27,7 @@ IdleConfig config_for(State s) {
         case State::FAULT:          return { 60000, 300000};
         case State::SET_TARGET:     return { 90000, 120000};
         case State::SET_TOLERANCE:  return { 60000,  90000};
+        case State::SET_BUZZER:     return { 60000,  90000};
         case State::ACTIVE:         return {180000, 300000}; // strokes-or-activity-based
         case State::SUMMARY:        return { 60000,  90000};
         // Same budget as SUMMARY: a static read-only screen the user is looking

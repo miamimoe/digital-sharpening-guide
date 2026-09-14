@@ -177,6 +177,15 @@ void draw_set_tolerance(Tolerance tol, bool steady) {
     draw_centered("A:Confirm  B:Chg  B-hold:Steady", 118, 1, COL_WHITE, COL_BLACK);
 }
 
+void draw_set_buzzer(bool buzzer_on) {
+    clear();
+    draw_centered("BUZZER", 8, 1, COL_WHITE, COL_BLACK);
+    draw_centered(buzzer_on ? "ON" : "OFF", 46, 4, COL_WHITE, COL_BLACK);
+    draw_centered(buzzer_on ? "Beeps when out of angle" : "Silent — screen color only",
+                  84, 1, COL_WHITE, COL_BLACK);
+    draw_centered("A:Confirm   B:Toggle", 118, 1, COL_WHITE, COL_BLACK);
+}
+
 void draw_active(const ActiveView& v) {
     // Angle is the coach. The full-screen color already says low/ok/high, so
     // there is no legend — that row is number now. Stroke count stays a hint.
@@ -497,6 +506,7 @@ namespace ui {
     void draw_boot() {}
     void draw_set_target(float, bool, PresetSelection) {}
     void draw_set_tolerance(Tolerance, bool) {}
+    void draw_set_buzzer(bool) {}
     void draw_active(const ActiveView&) {}
     void draw_summary(float, Tolerance, uint32_t, uint32_t, uint32_t, uint8_t) {}
     void draw_history(const SessionRecord*, int) {}

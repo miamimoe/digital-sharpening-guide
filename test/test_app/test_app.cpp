@@ -532,9 +532,68 @@ void test_tolerance_a_confirms_and_advances(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET -> SET_TOLERANCE
-    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE -> ZERO_CAL
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE -> SET_BUZZER
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_BUZZER -> ZERO_CAL
     TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_FLAT, (int)a.zero_cal_substate());
+}
+
+void test_buzzer_screen_b_toggles_without_persisting(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // SET_TOLERANCE -> SET_BUZZER
+    TEST_ASSERT_EQUAL_INT((int)State::SET_BUZZER, (int)a.current());
+    TEST_ASSERT_FALSE(a.buzzer_on());          // default off
+    advance(a, t, 100, InputEvent::B_SHORT);
+    TEST_ASSERT_TRUE(a.buzzer_on());
+    // Not persisted until A confirms — a stray reboot before confirming
+    // shouldn't stick the user with an unintended buzzer setting.
+    TEST_ASSERT_FALSE(settings::load_buzzer());
+    TEST_ASSERT_EQUAL_INT((int)State::SET_BUZZER, (int)a.current());
+}
+
+void test_buzzer_screen_a_confirms_persists_and_advances(void) {
+    App a;
+    a.begin(false);
+    uint32_t t = 0;
+    advance(a, t, 2100);
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
+    advance(a, t, 100, InputEvent::B_SHORT);   // turn buzzer on
+    advance(a, t, 100, InputEvent::A_SHORT);   // confirm -> ZERO_CAL
+    TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
+    TEST_ASSERT_TRUE(a.buzzer_on());
+    TEST_ASSERT_TRUE(settings::load_buzzer());
+}
+
+void test_beep_debounce_limits_rapid_boundary_chatter(void)
+{
+    // With steady mode off there is no colour hysteresis, so an angle sitting
+    // right on the tolerance edge can re-classify (and re-cross the
+    // GREEN -> non-GREEN edge) many times a second. The debounce must still
+    // cap it to at most one beep per kMinBeepIntervalMs window.
+    settings::save_buzzer(true);
+    settings::save_steady(false);
+    App a;
+    uint32_t t = 0;
+    reach_active(a, t);
+    advance(a, t, 2000, InputEvent::NONE, g_now_at_target_17); // settle into green
+    feedback::test_reset_beep_count();
+
+    const Vec3 out_of_tol = {0.0f, 0.0f, -1.0f}; // far below target
+    // Bounce green/out-of-tolerance every 20ms for 300ms: without a debounce
+    // this would fire far more than one beep.
+    for (int i = 0; i < 15; ++i)
+    {
+        Vec3 pose = (i % 2 == 0) ? out_of_tol : g_now_at_target_17;
+        advance(a, t, 20, InputEvent::NONE, pose);
+    }
+    TEST_ASSERT_TRUE(feedback::test_beep_out_count() <= 1);
+
+    settings::save_steady(true); // restore default for subsequent tests
 }
 
 void test_active_long_a_goes_to_summary(void) {
@@ -582,6 +641,7 @@ void test_zero_cal_flat_raise_flow_advances_to_active(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
     advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL (PROMPT_FLAT)
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_FLAT, (int)a.zero_cal_substate());
 
@@ -613,6 +673,7 @@ void test_zero_cal_long_a_aborts_to_set_target(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
     advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL
     advance(a, t, 100, InputEvent::A_LONG);    // abort
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
@@ -624,6 +685,7 @@ void test_zero_cal_abort_mid_capture_then_reenter_completes(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
     advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL (PROMPT_FLAT)
 
     Vec3 flat = {0.0f, 0.0f, -1.0f};
@@ -634,6 +696,7 @@ void test_zero_cal_abort_mid_capture_then_reenter_completes(void) {
     TEST_ASSERT_EQUAL_INT((int)State::SET_TARGET, (int)a.current());
 
     advance(a, t, 100, InputEvent::A_SHORT);
+    advance(a, t, 100, InputEvent::A_SHORT);      // -> SET_BUZZER (again)
     advance(a, t, 100, InputEvent::A_SHORT);      // -> ZERO_CAL (PROMPT_FLAT again)
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::PROMPT_FLAT, (int)a.zero_cal_substate());
 
@@ -658,6 +721,7 @@ void test_e2e_tilted_stone_bevel_is_relative_to_flat(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);   // SET_TARGET (default 17)
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
     advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL
     TEST_ASSERT_EQUAL_INT((int)State::ZERO_CAL, (int)a.current());
 
@@ -773,6 +837,7 @@ void test_zero_cal_capture_times_out_to_prompt(void) {
     uint32_t t = 0;
     advance(a, t, 2100);
     advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_TOLERANCE
+    advance(a, t, 100, InputEvent::A_SHORT);   // -> SET_BUZZER
     advance(a, t, 100, InputEvent::A_SHORT);   // -> ZERO_CAL (PROMPT_FLAT)
     advance(a, t, 100, InputEvent::A_SHORT);   // -> CAPTURE_FLAT
     TEST_ASSERT_EQUAL_INT((int)ZeroCalSubstate::CAPTURE_FLAT, (int)a.zero_cal_substate());
@@ -969,6 +1034,9 @@ int main(int, char**) {
     RUN_TEST(test_tolerance_b_long_toggles_steady_without_advancing);
     RUN_TEST(test_tolerance_b_long_does_not_change_tolerance);
     RUN_TEST(test_tolerance_a_confirms_and_advances);
+    RUN_TEST(test_buzzer_screen_b_toggles_without_persisting);
+    RUN_TEST(test_buzzer_screen_a_confirms_persists_and_advances);
+    RUN_TEST(test_beep_debounce_limits_rapid_boundary_chatter);
     RUN_TEST(test_active_long_a_goes_to_summary);
     RUN_TEST(test_summary_a_starts_new_session);
     RUN_TEST(test_active_long_b_toggles_buzzer_persistently);
