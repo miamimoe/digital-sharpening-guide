@@ -32,7 +32,7 @@ namespace power {
 #ifdef SG_OFF_AFTER_SLEEP_S
     constexpr uint32_t OFF_AFTER_SLEEP_S = SG_OFF_AFTER_SLEEP_S;
 #else
-    constexpr uint32_t OFF_AFTER_SLEEP_S = 30 * 60;
+    constexpr uint32_t OFF_AFTER_SLEEP_S = 15 * 60;
 #endif
 
     [[noreturn]] void enter_deep_sleep();

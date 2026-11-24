@@ -24,12 +24,13 @@ _▶️ Holding the target angle on a whetstone — screen stays green. [Watch t
 
 ---
 
-## What's new in v1.1.3
+## What's new in v1.1.4
 
 **It turns itself off, and the battery icon tells the truth.**
 
-- **Asleep is no longer a slow drain.** The power key still sleeps and wakes with one click, and a session still resumes. But deep sleep leaves the power chip and the motion sensor running, and a stick left asleep on a shelf was flat within days. After 30 minutes asleep the device now cuts its own power, and the motion sensor sleeps in the meantime. A power-key press starts it fresh.
+- **Asleep is no longer a slow drain.** The power key still sleeps and wakes with one click, and a session still resumes. But deep sleep leaves the power chip and the motion sensor running, and a stick left asleep on a shelf was flat within days. After 15 minutes asleep the device now cuts its own power, and the motion sensor sleeps in the meantime. A power-key press starts it fresh.
 - **Battery icon reads the cell, not a straight line (Plus).** The old figure mapped voltage to percent linearly and showed about half on a cell that was nearly empty, and it read higher still on the charger. The Plus now uses a LiPo curve and removes the offset from charging and from load.
+- *v1.1.3 shipped these two changes with a 30 minute wait before power-off; v1.1.4 shortens it to 15.*
 - *Tested on a Plus. The Plus2 gets the same power-off through the library call and has not been run on hardware; the S3 already powered off. Standby current has not been measured, and the battery curve is calibrated from one unit — if your icon disagrees with how long the stick lasts, [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues).*
 
 [**⚡ Flash the update in your browser**](https://miamimoe.github.io/digital-sharpening-guide/) — takes about a minute, no tools needed.
@@ -207,7 +208,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 |---|---|---|
 | **A** (front) | confirm / capture / **switch blade side** (ACTIVE) | **end session** (→ summary) / **accuracy check** (SET TARGET) |
 | **B** (side) | cycle option / **re-zero** (ACTIVE) / force-capture during a countdown | **toggle buzzer** (ACTIVE) / **toggle steady mode** (TOLERANCE) / **session history** (SUMMARY) |
-| **Power** (left side) | sleep / wake. After 30 minutes asleep it powers itself off; press it again to turn it back on | hold 6 s = full power-off right away (AXP192 / Plus only — see note below) |
+| **Power** (left side) | sleep / wake. After 15 minutes asleep it powers itself off; press it again to turn it back on | hold 6 s = full power-off right away (AXP192 / Plus only — see note below) |
 
 
 > ⚠️ The "hold 6 s = full power-off" behavior is AXP192-specific and applies to the **M5StickC Plus** only. On the **Plus2** and **S3**, the power button is managed by the board's own power IC through M5Unified; the long-hold power-off behavior may differ slightly.
@@ -219,7 +220,7 @@ Once flashed, the device walks you through everything on-screen. A full session:
 - **Edge-axis bevel measurement.** The two-step zero calibration captures both a flat reference *and* the cutting-edge hinge axis. The bevel angle is measured as rotation *about that axis*, so tip-to-heel skew doesn't inflate the reading and a single calibration serves both faces of the blade.
 - **Mahony AHRS filter** fuses gyro + accelerometer at 50 Hz, with per-session gyro-bias capture and a snap-to-raw recovery when the device is verifiably still.
 - **Motion-based stroke counting.** Passes are detected as horizontal linear-acceleration peaks (with hysteresis + a refractory interval) while you're on-angle — not from angle-dwell timing.
-- **Battery-aware.** Idle sleep, screen dimming, an 80 MHz CPU clock, and a one-click power key. On the **Plus/Plus2** this is a true deep sleep with the session preserved in RTC RAM, so waking resumes where you left off — strokes, time-on-angle, and session duration. Deep sleep is not off, though: the power chip stays up and a sleeping stick left on a shelf used to be flat within days. So after 30 minutes asleep the device now cuts its own power (the motion sensor is also put to sleep in the meantime); a power-key press then starts it fresh. On the **M5StickS3** the power button is owned by the M5PM1 PMIC (not a wake-capable GPIO), so the device fully powers off instead — a power-key press turns it back on with a fresh boot (the in-progress session isn't resumed on the S3). Figure on roughly an hour or two of continuous use on the small cell (untuned — your mileage will vary).
+- **Battery-aware.** Idle sleep, screen dimming, an 80 MHz CPU clock, and a one-click power key. On the **Plus/Plus2** this is a true deep sleep with the session preserved in RTC RAM, so waking resumes where you left off — strokes, time-on-angle, and session duration. Deep sleep is not off, though: the power chip stays up and a sleeping stick left on a shelf used to be flat within days. So after 15 minutes asleep the device now cuts its own power (the motion sensor is also put to sleep in the meantime); a power-key press then starts it fresh. On the **M5StickS3** the power button is owned by the M5PM1 PMIC (not a wake-capable GPIO), so the device fully powers off instead — a power-key press turns it back on with a fresh boot (the in-progress session isn't resumed on the S3). Figure on roughly an hour or two of continuous use on the small cell (untuned — your mileage will vary).
 
 More detail lives in [`docs/`](docs/) — the design spec, implementation plan, and hardware bring-up checklist.
 
@@ -246,7 +247,7 @@ docs/       design spec, bring-up checklist, and the browser-flasher page
 | S3 turns on and immediately powers off | Same family as above; v0.3.0 drains the power-on click. If it still happens, the M5PM1 may be hard-resetting on a single click — [open an issue](https://github.com/miamimoe/digital-sharpening-guide/issues). |
 | Resume shows the previous knife after a crash / reflash | Fixed in v0.3.0 — a non-sleep boot now discards the leftover session. |
 
-## Known limitations (v1.1.3)
+## Known limitations (v1.1.4)
 
 - Stroke-count thresholds are a factory guess. A very light or very heavy hand can be off by a pass or two — the number is a hint.
 - No companion app, BLE, or logging by design — it's meant to be a glanceable, standalone coach.
