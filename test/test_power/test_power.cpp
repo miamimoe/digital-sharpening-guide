@@ -64,6 +64,36 @@ void test_gate_passes_plausible_readings(void) {
     TEST_ASSERT_EQUAL_INT(-2, power::battery_level_gate(-2, 4100));   // error code passthrough
 }
 
+// The reading that prompted the rewrite: a Plus on charge at 89 mA showed
+// 3.78 V at the terminals and rested at 3.72 V. Both must land on the same
+// answer, and that answer is "low", not the library's 52-60 %.
+void test_ocv_removes_charge_and_load_offset(void) {
+    TEST_ASSERT_INT_WITHIN(8, 3720, power::battery_ocv_mv(3780, 89));    // charging reads high
+    TEST_ASSERT_EQUAL_INT(3720, power::battery_ocv_mv(3720, 0));         // resting: untouched
+    TEST_ASSERT_EQUAL_INT(3780, power::battery_ocv_mv(3720, -100));      // under load reads low
+}
+
+void test_lipo_percent_follows_the_cell_curve(void) {
+    TEST_ASSERT_EQUAL_INT(0,   power::lipo_percent(3000));
+    TEST_ASSERT_EQUAL_INT(0,   power::lipo_percent(3300));
+    TEST_ASSERT_EQUAL_INT(10,  power::lipo_percent(3690));
+    TEST_ASSERT_INT_WITHIN(3, 18, power::lipo_percent(3720));   // the measured cell: one bar at most
+    TEST_ASSERT_EQUAL_INT(50,  power::lipo_percent(3840));
+    TEST_ASSERT_EQUAL_INT(80,  power::lipo_percent(4020));
+    TEST_ASSERT_EQUAL_INT(100, power::lipo_percent(4150));
+    TEST_ASSERT_EQUAL_INT(100, power::lipo_percent(4250));
+}
+
+void test_lipo_percent_never_goes_backwards(void) {
+    int prev = 0;
+    for (int mv = 3200; mv <= 4300; mv += 5) {
+        int p = power::lipo_percent(mv);
+        TEST_ASSERT_TRUE(p >= prev);
+        TEST_ASSERT_TRUE(p >= 0 && p <= 100);
+        prev = p;
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_bars_fresh_bands);
@@ -73,5 +103,8 @@ int main(void) {
     RUN_TEST(test_bars_big_jump_not_held);
     RUN_TEST(test_gate_rejects_implausible_vbat);
     RUN_TEST(test_gate_passes_plausible_readings);
+    RUN_TEST(test_ocv_removes_charge_and_load_offset);
+    RUN_TEST(test_lipo_percent_follows_the_cell_curve);
+    RUN_TEST(test_lipo_percent_never_goes_backwards);
     return UNITY_END();
 }

@@ -4,8 +4,9 @@
 #ifndef UNIT_TEST
 #include <M5Unified.h>
 #include <esp_sleep.h>
-#include "board.h"
+#include <Wire.h>
 #endif
+#include "board.h"
 
 namespace power {
 
@@ -41,6 +42,32 @@ void begin() {}
 int battery_level_gate(int pct, int batt_mv) {
     if (batt_mv < BATTERY_MV_VALID_MIN) return -1;
     return pct;
+}
+
+int battery_ocv_mv(int vbat_mv, int current_ma) {
+    return vbat_mv - (current_ma * BATTERY_R_MOHM) / 1000;
+}
+
+int lipo_percent(int ocv_mv) {
+    // Resting-voltage curve of a single LiPo cell. 100 % sits a little under
+    // the 4.20 V charge target because the cell relaxes once the charger stops.
+    struct Pt { int mv; int pct; };
+    static constexpr Pt CURVE[] = {
+        {3300,   0}, {3610,   5}, {3690,  10}, {3730,  20}, {3770,  30},
+        {3800,  40}, {3840,  50}, {3870,  60}, {3950,  70}, {4020,  80},
+        {4090,  90}, {4150, 100},
+    };
+    constexpr int N = sizeof(CURVE) / sizeof(CURVE[0]);
+    if (ocv_mv <= CURVE[0].mv)     return 0;
+    if (ocv_mv >= CURVE[N - 1].mv) return 100;
+    for (int i = 1; i < N; i++) {
+        if (ocv_mv < CURVE[i].mv) {
+            const Pt lo = CURVE[i - 1];
+            const Pt hi = CURVE[i];
+            return lo.pct + ((ocv_mv - lo.mv) * (hi.pct - lo.pct)) / (hi.mv - lo.mv);
+        }
+    }
+    return 100;
 }
 
 int battery_bars(int pct, int prev_bars) {
@@ -114,16 +141,55 @@ BatteryView battery_sample(uint32_t now_ms) {
     if (s_polled && (now_ms - s_last_poll_ms) < interval) return s_view;
     s_polled       = true;
     s_last_poll_ms = now_ms;
-    int pct = battery_level_gate(M5.Power.getBatteryLevel(),
-                                 M5.Power.getBatteryVoltage());
+    const int mv = M5.Power.getBatteryVoltage();
+    // AXP192 (Plus): own curve with the charge/load offset removed. Plus2 and S3
+    // keep the library's figure: neither reports battery current, and neither
+    // has been measured on real hardware.
+    const int raw_pct = board::has_axp192()
+        ? lipo_percent(battery_ocv_mv(mv, M5.Power.getBatteryCurrent()))
+        : M5.Power.getBatteryLevel();
+    int pct = battery_level_gate(raw_pct, mv);
     if (pct >= 0) s_level_seen = true;
     s_view.bars     = battery_bars(pct, s_view.bars);
     s_view.charging = (M5.Power.isCharging() == m5::Power_Class::is_charging);
     return s_view;
 }
 
+void finish_power_off_if_timer_wake() {
+    if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER) return;
+#if defined(SG_BOARD_PLUS)
+    // Talk to the AXP192 directly so the display never lights: M5.begin() would
+    // flash the backlight on a device the user believes is off. REG32 bit 7 is
+    // the PMIC's own shutdown; the power key turns it back on.
+    Wire1.begin(21, 22, 100000);
+    Wire1.beginTransmission(0x34);
+    Wire1.write(0x32);
+    if (Wire1.endTransmission(false) == 0 && Wire1.requestFrom(0x34, 1) == 1) {
+        const uint8_t reg32 = Wire1.read();
+        Wire1.beginTransmission(0x34);
+        Wire1.write(0x32);
+        Wire1.write(reg32 | 0x80);
+        Wire1.endTransmission();
+        delay(500);              // the rails drop within this; not reached on success
+    }
+    Wire1.end();
+#endif
+    // Plus2 (hold-pin latch), or a Plus whose raw write did not take: let the
+    // library do it. On USB power a Plus2 cannot cut its own supply and the
+    // library falls back to a timer-less deep sleep, which is fine on a charger.
+    M5.begin(M5.config());
+    M5.Display.setBrightness(0);
+    M5.Power.powerOff();
+    while (true) { delay(1000); }
+}
+
 [[noreturn]] void enter_deep_sleep() {
     M5.Display.setBrightness(0);
+    const uint64_t off_after_us = (uint64_t)OFF_AFTER_SLEEP_S * 1000000ULL;
+    // The MPU6886 keeps sampling through an ESP32 deep sleep unless told to
+    // stop, and its gyro alone draws about 3 mA. M5.begin() resets and
+    // reconfigures it on wake. (The S3 cuts power below, so no need there.)
+    if (board::variant() != board::Variant::S3) M5.Imu.sleep();
     switch (board::variant()) {
         case board::Variant::PLUS:
             // M5Unified's deepSleep() does NOT arm a wake source on the AXP192
@@ -142,13 +208,15 @@ BatteryView battery_sample(uint32_t now_ms) {
             M5.Power.Axp192.writeRegister8(0x4D, 0xFF);
             esp_sleep_enable_ext0_wakeup(GPIO_NUM_35, 0);
 #endif
-            M5.Power.deepSleep();  // EXT0 armed above → wakes on power key, RTC session preserved
+            // EXT0 armed above → wakes on power key, RTC session preserved. The
+            // timer is the hand-over to a real power-off (see power.h).
+            M5.Power.deepSleep(off_after_us);
             break;
         case board::Variant::PLUS2:
             // The Plus2 has no AXP192, but M5Unified sets its internal _wakeupPin to
             // the power button (GPIO35) for this board, so deepSleep() arms EXT0
             // itself. Power key wakes it; the RTC-RAM session is preserved.
-            M5.Power.deepSleep();
+            M5.Power.deepSleep(off_after_us);
             break;
         case board::Variant::S3:
             // The StickS3 power button is owned by the M5PM1 PMIC (read over I2C),
@@ -165,6 +233,7 @@ BatteryView battery_sample(uint32_t now_ms) {
 }
 #else
 BatteryView battery_sample(uint32_t) { return {-1, false}; }
+void finish_power_off_if_timer_wake() {}
 [[noreturn]] void enter_deep_sleep() {
     while (true) {}
 }

@@ -24,6 +24,10 @@ static constexpr uint32_t TICK_PERIOD_MS = kLoopTickMs; // 50 Hz — ample for h
 static constexpr uint32_t IMU_FAULT_TICKS = 25;
 
 void setup() {
+    // Standby timer expired with nobody waking the device: cut power for real.
+    // Must run before M5.begin() so the screen stays dark.
+    power::finish_power_off_if_timer_wake();
+
     auto cfg = M5.config();
     cfg.internal_imu = true;
     cfg.internal_spk = true;

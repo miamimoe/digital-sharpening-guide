@@ -207,7 +207,7 @@
 <body>
   <div class="wrap">
     <header>
-      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.1.2</span></p>
+      <p class="eyebrow">Open-source firmware · M5Stick · <span class="ver">v1.1.3</span></p>
       <h1>Digital Sharpening Guide</h1>
       <p class="sub">A magnet-backed angle guide for your knives. Stick it to the blade, set a target angle, and the screen holds green while you hold the bevel. Flash it to your M5StickC&nbsp;Plus, Plus2, or M5StickS3 straight from this page — no toolchain, just a USB-C cable.</p>
     </header>
@@ -281,7 +281,7 @@
     <div class="step">
       <h2><span class="n">03</span> After flashing</h2>
       <ol>
-        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.1.2</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
+        <li>The device reboots into a <strong>SHARPENING GUIDE</strong> splash (it should say <code>v1.1.3</code>), then <strong>SET TARGET</strong>. A red <strong>WRONG FIRMWARE</strong> screen means you picked the build for a different stick — go back to step 01.</li>
         <li>Stick it onto the knife's flat — the magnet is in the back — and follow the on-screen calibration.</li>
         <li>The full walkthrough and control reference are in the <a href="https://github.com/miamimoe/digital-sharpening-guide#how-to-use-it" target="_blank" rel="noopener">README</a>.</li>
       </ol>
@@ -289,14 +289,20 @@
 
     <div class="step log">
       <h2><span class="n">&#9670;</span> What's new</h2>
-      <h3>v1.1.2</h3>
+      <h3>v1.1.3</h3>
       <ul>
-        <li><strong>No AXIS OK screen.</strong> A good raise goes straight into the live coach. A raise under 8&#176; still stays on step 2 (<code>RAISE MORE</code>).</li>
-        <li><strong>First number is the raised angle.</strong> Calibration now snaps the filter to the pose you just captured, so the reading no longer counts down from 40&#8211;90&#176;.</li>
-        <li><strong>Bigger angle, smaller vial.</strong> The LOW / OK / HIGH legend is gone. The number fills the panel; the spirit-level is a thin hint underneath.</li>
+        <li><strong>Asleep is no longer a slow drain.</strong> One click still sleeps and wakes, and a session still resumes. After 30 minutes asleep the device now cuts its own power, so a stick left on a shelf is not flat when you pick it up. A power-key press starts it fresh.</li>
+        <li><strong>Battery icon reads the cell (Plus).</strong> The old figure showed about half on a nearly empty cell. The Plus now uses a LiPo curve and removes the offset from charging and from load.</li>
+        <li>Tested on a Plus. The Plus2 power-off path has not been run on hardware.</li>
       </ul>
       <details>
         <summary>Earlier releases</summary>
+        <h3>v1.1.2</h3>
+        <ul>
+          <li><strong>No AXIS OK screen.</strong> A good raise goes straight into the live coach. A raise under 8&#176; still stays on step 2 (<code>RAISE MORE</code>).</li>
+          <li><strong>First number is the raised angle.</strong> Calibration now snaps the filter to the pose you just captured, so the reading no longer counts down from 40&#8211;90&#176;.</li>
+          <li><strong>Bigger angle, smaller vial.</strong> The LOW / OK / HIGH legend is gone. The number fills the panel; the spirit-level is a thin hint underneath.</li>
+        </ul>
         <h3>v1.1.1</h3>
         <ul>
           <li><strong>Front button flips the side.</strong> Short-press <strong>A</strong> to switch A &#8596; B. The peel / <code>FLIPPED?</code> prompt is gone.</li>

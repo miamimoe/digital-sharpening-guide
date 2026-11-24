@@ -143,7 +143,7 @@ void draw_boot() {
     clear();
     draw_centered("SHARPENING", 38, 2, COL_WHITE, COL_BLACK);
     draw_centered("GUIDE",      64, 2, COL_WHITE, COL_BLACK);
-    draw_centered("v1.1.2", 100, 1, COL_WHITE, COL_BLACK);
+    draw_centered("v1.1.3", 100, 1, COL_WHITE, COL_BLACK);
 }
 
 void draw_set_target(float live_angle_deg, bool in_preset_mode, PresetSelection preset) {
