@@ -15,6 +15,7 @@ enum class State : uint8_t {
     BOOT,
     SET_TARGET,
     SET_TOLERANCE,
+    SET_BUZZER,                // NEW: mute/unmute the out-of-tolerance buzzer before a session
     ZERO_CAL,                  // NEW
     ACTIVE,
     REZERO,                    // re-capture current side's zero from within ACTIVE

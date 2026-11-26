@@ -176,6 +176,7 @@ void App::transition(State to, uint32_t now_ms) {
             ui::draw_set_target(target_deg_, in_preset_mode_, preset_selection_);
             break;
         case State::SET_TOLERANCE: ui::draw_set_tolerance(tol_, steady_); break;
+        case State::SET_BUZZER:    ui::draw_set_buzzer(buzzer_on_); break;
         case State::ZERO_CAL:
             // Invalidate the ACTIVE dirty-region cache here rather than relying on
             // every predecessor screen having cleared it on its way out.
@@ -195,6 +196,7 @@ void App::transition(State to, uint32_t now_ms) {
             break;
         case State::ACTIVE: {
             stroke_fsm_.reset();
+            beeped_before_ = false;
             // Do NOT reset side_fsm_ here: the resume path (RESUME_PROMPT->ACTIVE)
             // must keep the side restored in begin(). Fresh sessions reset the
             // side explicitly in handle_zero_cal before transitioning here.
@@ -481,7 +483,21 @@ void App::handle_set_tolerance(const Tick& t) {
         ui::draw_set_tolerance(tol_, steady_);
     } else if (t.input == InputEvent::A_SHORT) {
         settings::save_tolerance(tol_);
-        // confirm tolerance, persist, advance into ZERO_CAL.
+        // confirm tolerance, persist, advance into SET_BUZZER (last stop before
+        // zero-cal now, so muting is a visible step and not just a hidden
+        // long-press discovered mid-session).
+        transition(State::SET_BUZZER, t.now_ms);
+    }
+}
+
+void App::handle_set_buzzer(const Tick& t) {
+    if (t.input == InputEvent::B_SHORT) {
+        buzzer_on_ = !buzzer_on_;
+        last_activity_ms_ = t.now_ms;
+        ui::draw_set_buzzer(buzzer_on_);
+    } else if (t.input == InputEvent::A_SHORT) {
+        settings::save_buzzer(buzzer_on_);
+        // confirm buzzer setting, persist, advance into ZERO_CAL.
         zc_substate_ = ZeroCalSubstate::PROMPT_FLAT;
         transition(State::ZERO_CAL, t.now_ms);
     }
@@ -583,9 +599,19 @@ void App::handle_active(const Tick& t) {
     }
 
     feedback::set_color(col);
+    // Beep only on the edge GREEN -> non-GREEN, not every tick — and only when
+    // prev_color_ is a real prior classification (see had_prev_color above).
+    // On top of that edge check, enforce a minimum real-world gap between
+    // beeps: an angle sitting right on the tolerance boundary can still cross
+    // it several times a second (especially with steady mode off, or a TIGHT
+    // tolerance), and the edge check alone would fire on every one of those
+    // re-crossings. This debounce turns that into one beep per short burst.
     if (buzzer_on_ && had_prev_color
-        && col != ColorState::GREEN && prev_color_ == ColorState::GREEN) {
+        && col != ColorState::GREEN && prev_color_ == ColorState::GREEN
+        && (!beeped_before_ || (t.now_ms - last_beep_ms_) >= kMinBeepIntervalMs)) {
         feedback::beep_out_of_tolerance();
+        last_beep_ms_  = t.now_ms;
+        beeped_before_ = true;
     }
     prev_color_ = col;
 
@@ -789,6 +815,7 @@ void App::on_tick(const Tick& t) {
         case State::ZERO_CAL:      handle_zero_cal(t); break;
         case State::SET_TARGET:    handle_set_target(t); break;
         case State::SET_TOLERANCE: handle_set_tolerance(t); break;
+        case State::SET_BUZZER:    handle_set_buzzer(t); break;
         case State::ACTIVE:        handle_active(t); break;
         case State::REZERO:        handle_rezero(t); break;
         case State::VERIFY:        handle_verify(t); break;
